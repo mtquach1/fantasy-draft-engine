@@ -19,4 +19,5 @@ venv/
 players_third_party.csv
 overrides_suggested.csv
 players.previous.csv
+
 check_before_github.py

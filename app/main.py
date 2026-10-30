@@ -306,10 +306,11 @@ class OverrideBody(BaseModel):
 
 def _override_rows() -> list:
     out = []
-    for pid, o in state.overrides.items():
-        base = state.base_raw_df[state.base_raw_df["player_id"] == pid].iloc[0]
-        out.append({"player_id": pid, "name": state.names.get(pid), "games": o.get("games"), "mpg": o.get("mpg"), "note": o.get("note"),
-                    "was_games": float(base["GP"]), "was_mpg": round(float(base["MIN"]) / float(base["GP"]), 1)})
+    with state.lock:                                   # readers take the lock too: a writer may be changing the dictionary right now
+        for pid, o in list(state.overrides.items()):
+            base = state.base_raw_df[state.base_raw_df["player_id"] == pid].iloc[0]
+            out.append({"player_id": pid, "name": state.names.get(pid), "games": o.get("games"), "mpg": o.get("mpg"), "note": o.get("note"),
+                        "was_games": float(base["GP"]), "was_mpg": round(float(base["MIN"]) / float(base["GP"]), 1)})
     return out
 
 

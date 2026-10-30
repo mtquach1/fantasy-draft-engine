@@ -57,9 +57,28 @@ class _SlowLog(list):
         return n
 
 
-def _slow_log(monkeypatch):
+def _slow_log(request):
+    """Swap in the slow log, and put the original back when the test ends. (Not monkeypatch: newer pytest versions undo patches on the
+    state proxy differently, which broke teardown in CI.)"""
     from app import main
-    monkeypatch.setattr(main.state, "draft_log", _SlowLog(main.state.draft_log))
+    original = main.state.draft_log
+    main.state.draft_log = _SlowLog(original)
+    request.addfinalizer(lambda: setattr(main.state, "draft_log", original))
+
+
+class _SlowNames(dict):
+    """Player names whose lookup pauses: makes the listing of overrides take long enough that a writer reliably changes the data mid-listing."""
+    def get(self, key, default=None):
+        import time
+        time.sleep(0.002)
+        return super().get(key, default)
+
+
+def _slow_names(request):
+    from app import main
+    original = main.state.names
+    main.state.names = _SlowNames(original)
+    request.addfinalizer(lambda: setattr(main.state, "names", original))
 
 
 def _ids(c, n):
@@ -150,10 +169,10 @@ def test_picks_without_a_key_behave_exactly_as_before(monkeypatch):
         assert c.post("/draft/pick", json={"player_id": pid}).status_code == 400
 
 
-def test_an_undo_storm_undoes_each_pick_exactly_once(monkeypatch):
+def test_an_undo_storm_undoes_each_pick_exactly_once(monkeypatch, request):
     with tempfile.TemporaryDirectory() as d, api(d, monkeypatch) as (c, app):
         _widen_race_window(monkeypatch)
-        _slow_log(monkeypatch)
+        _slow_log(request)
         _setup(c)
         for p in _ids(c, 3):
             c.post("/draft/pick", json={"player_id": p})
@@ -175,10 +194,10 @@ def test_undo_clears_remembered_keys_so_a_deliberate_redo_works(monkeypatch):
         assert r.status_code == 200 and len(c.get("/draft/log").json()) == 1
 
 
-def test_a_mixed_storm_of_picks_undos_resets_and_reads_never_errors_or_corrupts(monkeypatch):
+def test_a_mixed_storm_of_picks_undos_resets_and_reads_never_errors_or_corrupts(monkeypatch, request):
     with tempfile.TemporaryDirectory() as d, api(d, monkeypatch) as (c, app):
         _widen_race_window(monkeypatch)
-        _slow_log(monkeypatch)
+        _slow_log(request)
         _setup(c)
         ids = _ids(c, 60)
         rng = random.Random(7)
@@ -205,8 +224,9 @@ def test_a_mixed_storm_of_picks_undos_resets_and_reads_never_errors_or_corrupts(
         assert c.get("/team/summary").status_code == 200 and c.get("/players/available").status_code == 200
 
 
-def test_overrides_and_reads_can_happen_at_the_same_time(monkeypatch):
+def test_overrides_and_reads_can_happen_at_the_same_time(monkeypatch, request):
     with tempfile.TemporaryDirectory() as d, api(d, monkeypatch) as (c, app):
+        _slow_names(request)
         names = [r["name"] for r in c.get("/players/available?limit=8&sort=rank").json()]
         jobs = []
         for i, n in enumerate(names):
