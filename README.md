@@ -1,4 +1,6 @@
 # Fantasy Draft Engine
+![tests](https://github.com/mtquach1/fantasy-draft-engine/actions/workflows/tests.yml/badge.svg)
+**Live demo:** https://fantasy-draft-engine.onrender.com (free hosting: sleeps after 15 minutes idle; runs on fake sample data; drafts are temporary)
 
 A draft assistant for fantasy basketball (baseball and football profiles are included too). It projects every player with its own
 model, values them for **your** league's scoring and roster, and during a draft recommends the pick that adds the most to *your*
