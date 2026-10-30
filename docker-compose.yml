@@ -1,0 +1,11 @@
+services:
+  draft:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      SPORT: nba
+      LEAGUE_PRESET: espn_default
+      DRAFT_PLATFORM: manual
+    volumes:
+      - ./data:/app/data        # your projections and saved draft live here, outside the container

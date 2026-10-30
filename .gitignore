@@ -1,0 +1,22 @@
+# secrets and local settings: NEVER commit these
+.env
+data/oauth2.json
+*.pem
+
+# your data (projections come from third parties; saved drafts are personal)
+data/*
+!data/.gitkeep
+!data/README.md
+
+# python / tooling
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# third-party data you downloaded or pasted: never publish
+players_third_party.csv
+overrides_suggested.csv
+players.previous.csv
+check_before_github.py

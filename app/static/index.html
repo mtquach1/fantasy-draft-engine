@@ -1,0 +1,747 @@
+
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Draft Room</title>
+<style>
+:root{--bg:#f4f6fb;--card:#fff;--ink:#1c2333;--muted:#667085;--line:#e3e7ef;--accent:#4f46e5;--accent-ink:#fff;
+--ok:#12805c;--ok-bg:#e6f6ef;--err:#c0352b;--err-bg:#fdecea;--chip:#eef0f7;--shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.06)}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1320;--card:#181d2d;--ink:#eef1f8;--muted:#97a0b5;--line:#2a3147;
+--accent:#818cf8;--accent-ink:#0f1320;--ok:#4ade9d;--ok-bg:#12332a;--err:#ff8b80;--err-bg:#3a1c1a;--chip:#232a40;--shadow:none}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:960px;margin:0 auto;padding:28px 18px 56px}
+header{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+.logo{width:46px;height:46px;border-radius:14px;background:var(--accent);display:grid;place-items:center;font-size:24px}
+h1{margin:0;font-size:24px;letter-spacing:-.01em}header p{margin:0;color:var(--muted);font-size:14px}
+header a{margin-left:auto;color:var(--muted);font-size:14px;text-decoration:none;border:1px solid var(--line);padding:6px 12px;border-radius:999px}
+header a:hover{color:var(--ink)}
+.grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:18px}
+@media(max-width:780px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:var(--shadow)}
+h2{margin:0 0 16px;font-size:17px}
+.field{margin-bottom:16px}
+label{display:block;font-weight:600;font-size:14px;margin-bottom:6px}
+input,select{width:100%;padding:11px 13px;font:inherit;color:var(--ink);background:var(--card);border:1.5px solid var(--line);border-radius:11px;outline:none;transition:border-color .15s,box-shadow .15s}
+input::placeholder{color:var(--muted);opacity:.7}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.field.bad input{border-color:var(--err)}
+.msg{margin:6px 2px 0;font-size:13px;color:var(--muted);min-height:19px}
+.field.bad .msg{color:var(--err)}
+details{margin:2px 0 16px}summary{cursor:pointer;color:var(--muted);font-size:14px}details .field{margin:12px 0 0}
+.btn{width:100%;padding:12px;border:0;border-radius:11px;font:inherit;font-weight:600;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+.btn:disabled{opacity:.45;cursor:not-allowed}.btn:not(:disabled):hover{filter:brightness(1.07)}
+.btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--line);width:auto;padding:8px 14px;font-weight:500;font-size:14px}
+.btn.ghost:hover{color:var(--ink)}
+.banner{border-radius:12px;padding:11px 14px;margin-bottom:16px;font-size:14px;background:var(--err-bg);color:var(--err)}
+.banner.ok{background:var(--ok-bg);color:var(--ok)}
+.empty{color:var(--muted);text-align:center;padding:42px 12px}.empty .big{font-size:38px}
+.tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.tag{background:var(--chip);border-radius:999px;padding:4px 12px;font-size:13px;font-weight:600}
+.hero{border-radius:14px;padding:18px;text-align:center;background:var(--chip);margin-bottom:16px}
+.hero .n{font-size:46px;font-weight:700;line-height:1.05;letter-spacing:-.02em}
+.hero .t{color:var(--muted);font-size:14px}
+.hero.clock{background:var(--ok-bg);color:var(--ok)}.hero.clock .n{font-size:30px}
+.sub{color:var(--muted);font-size:14px;margin:0 0 16px;text-align:center}
+.lbl{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{min-width:34px;text-align:center;padding:5px 8px;border-radius:9px;background:var(--chip);font-size:13px;font-weight:600;border:2px solid transparent}
+.chip.now{border-color:var(--accent);background:var(--card)}
+.chip.me{background:var(--accent);color:var(--accent-ink)}
+.chip.done{opacity:.4}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:20px}
+.pill{margin-left:auto;font-size:13px;border:1px solid var(--line);padding:6px 12px;border-radius:999px;color:var(--muted);white-space:nowrap}
+.pill.on{color:var(--ok);border-color:var(--ok)}.pill.off{color:var(--err);border-color:var(--err)}header a{margin-left:0}
+.score{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}.score .n{font-size:40px;font-weight:700;letter-spacing:-.02em}
+.badge{font-size:13px;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--chip)}
+.badge.good{background:var(--ok-bg);color:var(--ok)}.badge.bad{background:var(--err-bg);color:var(--err)}
+.note{color:var(--muted);font-size:13px;margin:4px 0 0}
+.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin:10px 0 4px}
+.rgrid label{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:600;color:var(--muted)}
+.rgrid input{width:100%;padding:8px;border:1px solid var(--line);border-radius:9px;background:transparent;color:var(--ink);font:inherit;text-align:center}
+.rgrid input:disabled{opacity:.5}.rbtns{display:flex;gap:8px;flex-wrap:wrap}
+.ros{display:grid;grid-template-columns:46px 1fr auto;gap:3px 10px;font-size:14px;margin-top:12px}
+.ros .s{color:var(--muted);font-weight:700}.ros .e{color:var(--muted);opacity:.5}.ros .v{color:var(--muted);font-variant-numeric:tabular-nums}
+.hero.warn{background:var(--err-bg);color:var(--err)}.hero.warn .n,.hero.clock .n.sm{font-size:26px}
+.bars{display:grid;gap:5px;margin-top:8px}.bar{display:grid;grid-template-columns:34px 1fr 62px;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.bar b{display:block;height:9px;border-radius:5px;background:var(--line)}.bar.me b{background:var(--accent)}.bar.me{color:var(--ink);font-weight:700}
+.feed div{padding:8px 0;border-top:1px solid var(--line);font-size:14px}.feed .mine{color:var(--ok);font-weight:600}
+.mt{margin-top:18px}
+.bar2{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px}.bar2 .f{flex:1 1 220px;min-width:0}.bar2 .f label{margin-bottom:4px}
+.bar2 .next{flex:2 1 260px;font-size:15px}.bar2 .next b{font-size:18px}
+.btn.sm{width:auto;padding:8px 14px;font-size:14px;white-space:nowrap}.btn.sm.ghost{padding:8px 14px}
+.info{border-radius:12px;padding:10px 14px;margin:12px 0 0;font-size:14px;background:var(--chip);color:var(--muted)}
+h3{margin:0 0 10px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px}
+.filters select{width:auto;flex:0 0 112px;padding:8px 10px}.filters input[type=text]{flex:1 1 140px;min-width:0;padding:8px 12px}
+.filters label.chk{display:flex;align-items:center;gap:6px;margin:0;font-weight:500;font-size:13px;color:var(--muted);white-space:nowrap}
+.filters input[type=checkbox]{width:auto}
+.plist{display:grid;gap:0}.pr{display:grid;grid-template-columns:40px minmax(0,1fr) 64px 62px auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.pr.head{border-top:0;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding-top:0}
+.pr .rk{color:var(--muted);font-variant-numeric:tabular-nums}.pr .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.pr .pos{color:var(--muted);font-size:13px}.pr .vl{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.pr .sub2{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.flag{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;margin-left:6px;vertical-align:1px;background:var(--err-bg);color:var(--err)}
+.flag.hurt{background:var(--chip);color:var(--muted)}
+.updating{opacity:.5;pointer-events:none;transition:opacity .15s}
+.rec{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.rec:first-child{border-top:0}.rec .nm{font-weight:600}.rec .why{grid-column:1;color:var(--muted);font-size:13px}.rec .go{grid-row:1/3;grid-column:2}
+.gain{font-weight:700;color:var(--ok)}.gain.neg{color:var(--err)}
+.plog div{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:8px;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.plog .mine{color:var(--ok);font-weight:600}.plog .n{color:var(--muted)}
+@media(max-width:560px){.pr{grid-template-columns:34px minmax(0,1fr) 52px auto}.pr .vl{display:none}.pr.head .vl{display:none}.wrap{padding:18px 12px 40px}.card{padding:16px}}
+.bud{display:grid;grid-template-columns:46px 1fr 1fr 1fr;gap:3px 8px;font-size:13px;margin-top:10px;font-variant-numeric:tabular-nums}
+.bud span{padding:2px 0}.bud .h{color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.05em}.bud .me{color:var(--accent);font-weight:700}
+.bud .low{color:var(--err)}
+.price{font-weight:700;color:var(--ok)}
+@media(max-width:560px){.plist.auc .pr{grid-template-columns:34px minmax(0,1fr) 52px auto}.plist.auc .pr .pos{display:none}.plist.auc .pr .vl,.plist.auc .pr.head .vl{display:block}}
+.btn:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">⚾</div>
+    <div><h1>Draft Room</h1><p>Set up your league and the draft clock tracks the rest.</p></div>
+    <span class="pill" id="conn">Connecting…</span>
+    <a href="/docs">API docs</a>
+  </header>
+  <div id="banner" class="banner" hidden></div>
+  <div class="grid">
+    <section class="card">
+      <h2>Draft setup</h2>
+      <div class="field" id="f-sport">
+        <label for="sport">Sport</label>
+        <select id="sport"></select>
+        <p class="msg" id="m-sport">Switching sport loads that sport's projections and clears the draft.</p>
+      </div>
+      <div class="field" id="f-type">
+        <label for="type">Draft format</label>
+        <select id="type"></select>
+        <p class="msg" id="m-type"></p>
+      </div>
+      <div class="field" id="f-teams">
+        <label for="teams">Number of teams</label>
+        <input id="teams" inputmode="numeric" autocomplete="off" placeholder="e.g. 12">
+        <p class="msg" id="m-teams"></p>
+      </div>
+      <div class="field" id="f-my_slot">
+        <label for="my_slot" id="slotLabel">Your draft pick</label>
+        <input id="my_slot" inputmode="numeric" autocomplete="off" placeholder="e.g. 5">
+        <p class="msg" id="m-my_slot"></p>
+      </div>
+      <div class="field" id="f-budget" hidden>
+        <label for="budget">Auction budget per team ($)</label>
+        <input id="budget" inputmode="numeric" autocomplete="off" placeholder="e.g. 260">
+        <p class="msg" id="m-budget"></p>
+      </div>
+      <div class="field" id="blendBox" style="display:none">
+        <label for="blend">Projection blend</label>
+        <input id="blend" type="range" min="0" max="100" step="5" value="0" style="width:100%">
+        <p class="msg" id="blendNote"></p>
+      </div>
+      <details id="rosterBox">
+        <summary>Roster slots <span class="note" id="rosterSummary"></span></summary>
+        <p class="note">How many of each position every team starts. Match your league's settings before the draft begins; the recommendations adapt to whatever you set here.</p>
+        <div id="rosterGrid" class="rgrid"></div>
+        <p class="msg" id="m-roster"></p>
+        <div class="rbtns"><button class="btn ghost" id="rosterSave">Save roster</button><button class="btn ghost" id="rosterReset">Reset to default</button></div>
+      </details>
+      <details>
+        <summary>Advanced</summary>
+        <div class="field" id="f-rounds">
+          <label for="rounds">Rounds</label>
+          <input id="rounds" inputmode="numeric" autocomplete="off">
+          <p class="msg" id="m-rounds"></p>
+        </div>
+      </details>
+      <button class="btn" id="save">Save draft setup</button>
+    </section>
+
+    <section class="card" id="status"></section>
+  </div>
+  <section class="card mt" id="assign">
+    <div class="bar2">
+      <div class="next" id="next">Save your draft setup to start recording picks.</div>
+      <div class="f"><label for="assignTo">Record the next pick for</label><select id="assignTo"></select></div>
+      <div class="f" id="priceBox" hidden><label for="price">Price paid ($)</label><input id="price" inputmode="numeric" autocomplete="off" placeholder="e.g. 23"></div>
+      <button class="btn sm ghost" id="undo" disabled>Undo last pick</button>
+    </div>
+    <p class="info" id="entryNote" hidden></p>
+  </section>
+  <div class="grid mt">
+    <section class="card"><h2>Recommended for you</h2><div id="recs"><p class="note">Loading…</p></div></section>
+    <section class="card">
+      <h2>Available players</h2>
+      <div class="filters">
+        <select id="posFilter" aria-label="Position"><option value="">All positions</option></select>
+        <input type="text" id="search" placeholder="Search by name" autocomplete="off" aria-label="Search players by name">
+        <select id="sortBy" aria-label="Sort players by"><option value="value">Sort: value over replacement</option><option value="rank">Sort: overall rank</option></select>
+        <label class="chk"><input type="checkbox" id="hideInj"> Hide injury-prone</label>
+      </div>
+      <div id="players"><p class="note">Loading…</p></div>
+    </section>
+  </div>
+  <div class="grid mt">
+    <section class="card" id="team"></section>
+    <section class="card" id="bench"></section>
+  </div>
+  <div class="grid mt">
+    <section class="card" id="recent"></section>
+    <section class="card" id="feed"></section>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const FIELDS = ["type", "teams", "my_slot", "budget", "rounds"];
+const touched = new Set(), serverErr = {};
+let meta = {options: [], limits: {}, default_rounds: 25}, current = null, timer = null;
+
+const whole = v => /^\d+$/.test(v.trim()) ? parseInt(v.trim(), 10) : null;
+const blank = v => v.trim() === "";
+
+function check() {                                   // mirrors the server rules, so errors show as you type
+  const L = meta.limits, e = {}, h = {};
+  const auction = $("type").value === "auction";
+  const t = $("teams").value, s = $("my_slot").value, b = $("budget").value, r = $("rounds").value;
+  let teams = null;
+  if (blank(t)) e.teams = "Enter how many teams are in your league.";
+  else if (whole(t) === null) e.teams = "Use a whole number, like 12.";
+  else if (whole(t) < L.min_teams || whole(t) > L.max_teams) e.teams = `Teams must be between ${L.min_teams} and ${L.max_teams}.`;
+  else teams = whole(t);
+  if (blank(s)) { if (!auction) e.my_slot = "Enter your draft pick, your spot in the first round."; }
+  else if (whole(s) === null) e.my_slot = "Use a whole number, like 5.";
+  else if (whole(s) < 1) e.my_slot = "Your pick can't be lower than 1.";
+  else if (teams !== null && whole(s) > teams) e.my_slot = `Your pick can't be higher than ${teams}: a ${teams}-team league has picks 1 to ${teams}.`;
+  h.my_slot = teams ? `Any whole number from 1 to ${teams}.` : "Enter the number of teams first.";
+  if (auction) h.my_slot = "Your team number, which is also your nomination order. Blank means team 1.";
+  let rounds = meta.default_rounds;
+  if (!blank(r)) {
+    if (whole(r) === null || whole(r) < 1 || whole(r) > L.max_rounds) e.rounds = `Rounds must be a whole number from 1 to ${L.max_rounds}.`;
+    else rounds = whole(r);
+  }
+  h.rounds = `Leave blank to use your roster size (${meta.default_rounds}).`;
+  if (auction) {
+    if (blank(b)) e.budget = "Enter each team's auction budget, like 260.";
+    else if (whole(b) === null || whole(b) < 1 || whole(b) > L.max_budget) e.budget = `Budget must be a whole number from 1 to ${L.max_budget}.`;
+    else if (!e.rounds && whole(b) < rounds) e.budget = `Budget must cover at least $1 for each of the ${rounds} roster spots.`;
+  }
+  return {e, h};
+}
+
+function render() {
+  const {e, h} = check(), auction = $("type").value === "auction";
+  $("f-budget").hidden = !auction;
+  $("slotLabel").textContent = auction ? "Your team number (optional)" : "Your draft pick";
+  const opt = meta.options.find(o => o.value === $("type").value);
+  $("m-type").textContent = opt ? opt.description : "";
+  for (const f of ["teams", "my_slot", "budget", "rounds"]) {
+    const msg = (touched.has(f) && (serverErr[f] || e[f])) || "";
+    $("f-" + f).classList.toggle("bad", !!msg);
+    $("m-" + f).textContent = msg || h[f] || "";
+  }
+  $("save").disabled = Object.keys(e).length > 0;
+  return e;
+}
+
+let bannerTimer = null, loadBanner = false;
+function banner(text, ok) {
+  const b = $("banner"); clearTimeout(bannerTimer); loadBanner = false;
+  b.hidden = !text; b.textContent = text || ""; b.className = "banner" + (ok ? " ok" : "");
+  if (text) bannerTimer = setTimeout(() => { if (b.textContent === text) b.hidden = true; }, ok ? 6000 : 15000);   // messages fade on their own
+}
+
+async function api(path, opts) {
+  let res;
+  try { res = await fetch(path, opts); } catch { throw {msg: "Can't reach the draft server. Is uvicorn still running?"}; }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw {status: res.status, errors: data.detail && data.detail.errors,
+                      msg: typeof data.detail === "string" ? data.detail : (data.detail && data.detail.message) || "Something went wrong. Check the server window."};
+  return data;
+}
+
+function el(tag, cls, text) { const x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; }
+
+function chips(list, cls) { const w = el("div", "chips"); list.forEach(([t, c]) => w.append(el("span", "chip " + (c || ""), t))); return w; }
+
+function renderStatus(payload) {
+  const box = $("status"); box.replaceChildren();
+  const setup = payload && payload.setup, st = payload && payload.status;
+  box.append(el("h2", null, "Draft status"));
+  if (!setup) {
+    const d = el("div", "empty"); d.append(el("div", "big", "🕐"), el("p", null, "Save your draft setup to start the clock."));
+    box.append(d); return;
+  }
+  const label = meta.options.find(o => o.value === setup.draft_type).label;
+  const tags = el("div", "tags");
+  [label, `${setup.teams} teams`, setup.my_slot ? `You: ${setup.draft_type === "auction" ? "team" : "pick"} ${setup.my_slot}` : (setup.draft_type === "auction" ? "" : "No pick set")].filter(Boolean).forEach(t => tags.append(el("span", "tag", t)));
+  box.append(tags);
+  if (st.mode === "auction") {
+    renderAuction(box, payload.auction, st);
+  } else if (st.complete) {
+    const hero = el("div", "hero clock"); hero.append(el("div", "n", "Draft complete 🎉"));
+    box.append(hero, el("p", "sub", `All ${st.total_picks} picks are in.`));
+  } else {
+    const hero = el("div", "hero" + (st.you_are_on_the_clock ? " clock" : ""));
+    if (st.you_are_on_the_clock) hero.append(el("div", "n", "You're on the clock!"), el("div", "t", `Pick ${st.current_pick} · Round ${st.round}`));
+    else if (st.my_next_pick == null) hero.append(el("div", "n", "Done"), el("div", "t", "You have no picks left"));
+    else hero.append(el("div", "n", st.picks_until_my_turn), el("div", "t", st.picks_until_my_turn === 1 ? "pick until your turn" : "picks until your turn"));
+    box.append(hero);
+    if (!st.you_are_on_the_clock)
+      box.append(el("p", "sub", `Now: pick ${st.current_pick} (round ${st.round}), slot ${st.on_clock_slot} is up.` +
+        (st.my_next_pick ? ` Your next pick is #${st.my_next_pick} in round ${st.my_next_round}.` : "")));
+    box.append(el("div", "lbl", `Round ${st.round} order`));
+    box.append(chips(st.round_order.map((slot, i) => [slot, (slot === setup.my_slot ? "me " : "") + (i + 1 === st.pick_in_round ? "now " : "") + (i + 1 < st.pick_in_round ? "done" : "")])));
+    box.append(el("div", "lbl", `Your picks (${st.my_picks_made} made, ${st.my_picks_remaining} to go)`));
+    box.append(chips(st.my_pick_numbers.map(n => ["#" + n, n < st.current_pick ? "done" : n === st.current_pick ? "me now" : ""])));
+  }
+  const row = el("div", "row"), refresh = el("button", "btn ghost", "Refresh"), reset = el("button", "btn ghost", "Start new draft");
+  refresh.onclick = load;
+  reset.onclick = async () => {
+    if (!confirm("Clear every logged pick and start over? Your setup is kept.")) return;
+    try { const r = await api("/draft/reset", {method: "POST"}); banner(`Cleared ${r.cleared} pick(s).`, true); load(); } catch (x) { banner(x.msg); }
+  };
+  row.append(refresh, reset); box.append(row);
+}
+
+const money = v => v == null ? "–" : (v < 0 ? "−$" + Math.abs(v) : "$" + v);
+
+function renderAuction(box, a, st) {
+  if (!a) return;
+  const nom = a.nomination || {}, mine = a.mine;
+  if (st.complete || nom.next_team == null) {
+    const hero = el("div", "hero clock"); hero.append(el("div", "n", "Draft complete 🎉"));
+    box.append(hero, el("p", "sub", `All ${st.total_picks} players are drafted.`));
+  } else {
+    const me = nom.next_team === a.my_team_id, hero = el("div", "hero" + (me ? " clock" : ""));
+    if (me) hero.append(el("div", "n", "You nominate next!"), el("div", "t", `Pick ${st.picks_made + 1} of ${st.total_picks}`));
+    else hero.append(el("div", "n", "Team " + nom.next_team), el("div", "t", nom.until_mine == null ? "nominates next" : `nominates next · ${nom.until_mine} nomination${nom.until_mine === 1 ? "" : "s"} before yours`));
+    box.append(hero);
+  }
+  if (mine) {
+    box.append(el("div", "lbl", `Your budget (team ${mine.team_id})`));
+    box.append(chips([[money(mine.remaining) + " left"], [`max bid ${money(mine.max_bid)}`], [`${mine.open_spots} spot${mine.open_spots === 1 ? "" : "s"} to fill`]]));
+  }
+  if (a.inflation != null) {
+    const pct = Math.round(a.inflation * 100);
+    box.append(el("p", "note mt", Math.abs(pct) < 3 ? "Prices are running about even with the pre-draft list."
+      : `Prices are running ${Math.abs(pct)}% ${pct > 0 ? "above" : "below"} the pre-draft list, so suggested bids are ${pct > 0 ? "higher" : "lower"} than at the start.`));
+  }
+  if (a.unpriced) box.append(el("p", "note", `⚠ ${a.unpriced} pick(s) came in without a price, so they're counted as $1 and budgets are approximate.`));
+  const d = el("details"); d.append(el("summary", null, "All team budgets"));
+  const g = el("div", "bud");
+  ["Team", "Left", "Spots", "Max bid"].forEach(t => g.append(el("span", "h", t)));
+  a.teams.forEach(t => {
+    const c = t.team_id === a.my_team_id ? "me" : "";
+    g.append(el("span", c, "#" + t.team_id), el("span", c, money(t.remaining)), el("span", c, String(t.open_spots)), el("span", c + (t.open_spots && t.max_bid < 5 ? " low" : ""), money(t.max_bid)));
+  });
+  d.append(g, el("p", "note", "Nominations are assumed to go in order 1 to N, skipping full rosters. If your league uses a different order, ignore the nominator."));
+  box.append(d);
+}
+
+const ago = t => { const s = Math.max(0, Math.round(Date.now() / 1000 - t)); return s < 60 ? s + "s ago" : Math.round(s / 60) + "m ago"; };
+const num = (v, f) => v == null ? "–" : f === "points" ? Math.round(v).toLocaleString() : v.toFixed(1);
+const sgn = (v, f) => (v >= 0 ? "+" : "−") + num(Math.abs(v), f);
+
+function renderConn(s) {
+  const c = $("conn"); c.className = "pill"; c.title = s.last_error || s.message || "";
+  if (s.platform === "manual") c.textContent = "Manual mode";
+  else if (s.connected) { c.classList.add("on"); c.textContent = `● Live · ${s.platform} · synced ${ago(s.last_ok)}`; }
+  else { c.classList.add("off"); c.textContent = `● ${s.platform} not connected`; }
+}
+
+function renderTeam(t) {
+  const box = $("team"), b = t.benchmark; box.replaceChildren(el("h2", null, "Your team"));
+  const sc = el("div", "score"); sc.append(el("span", "n", num(t.score, t.format)));
+  if (b.status === "ok") sc.append(el("span", "badge " + (b.verdict === "ahead" ? "good" : b.verdict === "on track" ? "" : "bad"), `${sgn(b.gap, t.format)} vs expected`));
+  box.append(sc, el("p", "note", t.score_label));
+  const g = el("div", "ros");
+  t.roster.forEach(r => g.append(el("span", "s", r.slot), el("span", r.name ? "" : "e", r.name || "empty"), el("span", "v", r.value == null ? "" : num(r.value, t.format))));
+  box.append(g, el("p", "note", `${t.picks} pick(s) so far. Right column: value above a replacement-level player at that slot.`));
+}
+
+function renderBench(t) {
+  const box = $("bench"), b = t.benchmark, f = t.format; box.replaceChildren(el("h2", null, "Pace for your pick"));
+  if (b.status !== "ok" && b.status !== "no_picks") {
+    box.append(el("p", "note", b.status === "calculating" ? "Simulating typical drafts for every pick slot… a few seconds." : b.reason || "Not available.")); return;
+  }
+  if (b.status === "ok") {
+    const say = {ahead: "Ahead of pace", "on track": "On pace", behind: "Weaker than expected", "well behind": "Much weaker than expected"}[b.verdict];
+    const hero = el("div", "hero " + (b.verdict === "ahead" || b.verdict === "on track" ? "clock" : "warn"));
+    hero.append(el("div", "n sm", say), el("div", "t", `After ${b.picks} pick(s), the average team picking #${b.my_slot} has ${num(b.expected_now, f)}. You have ${num(t.score, f)} (${sgn(b.gap, f)}).`));
+    box.append(hero);
+  } else box.append(el("p", "note", "Make your first pick to see how you compare."));
+  box.append(el("div", "lbl", "Expected final score by pick slot"));
+  const v = b.expected_final_by_slot, lo = Math.min(...v), rng = (Math.max(...v) - lo) || 1, bars = el("div", "bars");
+  v.forEach((x, i) => {
+    const row = el("div", "bar" + (i + 1 === b.my_slot ? " me" : "")), bar = el("b"), w = el("div");
+    bar.style.width = (12 + 88 * (x - lo) / rng) + "%"; w.append(bar);
+    row.append(el("span", null, "#" + (i + 1)), w, el("span", null, num(x, f))); bars.append(row);
+  });
+  box.append(bars, el("p", "note", `Averages of ${b.runs} simulated drafts, so treat it as a guide. Final scores bunch together because every team fills a full roster; the gap shows up earlier.`));
+}
+
+function renderFeed(s) {
+  const box = $("feed"); box.replaceChildren(el("h2", null, "Connection"));
+  const problems = s.setup_problems || [];
+  if (s.platform === "manual")
+    box.append(el("p", "note", "Manual mode: record each pick with the Draft buttons, in draft order. To follow Yahoo or ESPN automatically, set DRAFT_PLATFORM=yahoo or espn in .env (see the README)."));
+  else if (!problems.length)
+    box.append(el("p", "note", s.message + (!s.connected && s.last_error ? " — " + s.last_error : "")));
+  problems.forEach(t => box.append(el("p", "note", "⚠ " + t)));
+  (s.setup_warnings || []).forEach(t => box.append(el("p", "note", "ℹ " + t)));
+  if (s.map_note) box.append(el("p", "note", "ℹ " + s.map_note));
+  if (s.unmatched && s.unmatched.length)
+    box.append(el("p", "note", "Couldn't match to your projections: " + s.unmatched.slice(0, 6).map(u => u.name ? `${u.name} (${u.id})` : u.id).join(", ")
+      + ". Add them to data/id_crosswalk.csv (columns player_id and " + s.platform + "_id)."));
+  else if (s.unmapped && s.unmapped.length)
+    box.append(el("p", "note", "Unmatched platform ids: " + s.unmapped.slice(0, 8).join(", ") + ". Add them to data/id_crosswalk.csv."));
+  if (s.platform === "manual") return;
+  const f = el("div", "feed");
+  if (!s.events.length) f.append(el("div", null, "Waiting for picks…"));
+  s.events.forEach(e => f.append(el("div", e.mine ? "mine" : "", e.type === "undo" ? e.text
+    : (e.mine ? `You drafted ${e.player}` : `${e.player} → team ${e.team_id}`) + ` · pick #${e.pick_number}`)));
+  box.append(f);
+}
+
+async function live() {
+  let refreshed = false;                                     // true when a changed pick count already refreshed the board
+  const [a, b] = await Promise.allSettled([api("/sync/status"), api("/team/summary")]);
+  if (a.status === "fulfilled") {
+    renderConn(a.value); renderFeed(a.value);
+    if (a.value.picks_logged !== board.picks) { board.picks = a.value.picks_logged; refreshBoard(); refreshRecent(); refreshed = true; }
+  }
+  if (b.status === "fulfilled") { renderTeam(b.value); renderBench(b.value); }
+  return refreshed;
+}
+const tick = async () => { if (document.hidden) return; await load(); live(); };
+
+function fill(setup) {
+  $("type").value = setup.draft_type; $("teams").value = setup.teams;
+  $("my_slot").value = setup.my_slot ?? ""; $("budget").value = setup.budget ?? "";
+  $("rounds").value = setup.rounds === meta.default_rounds ? "" : setup.rounds;
+}
+
+function checkMode(p) {                           // snake -> auction etc: bids and the price box appear or disappear
+  const mode = p.setup ? p.setup.draft_type : "";
+  if (mode !== board.mode) { board.mode = mode; refreshBoard(); }
+}
+
+async function load(first) {
+  try {
+    const p = await api("/draft/setup");
+    if (first) {
+      meta = {options: p.options, limits: p.limits, default_rounds: p.default_rounds};
+      $("type").replaceChildren(...p.options.map(o => { const x = el("option", null, o.label); x.value = o.value; return x; }));
+      $("sport").replaceChildren(...p.sports.map(o => { const x = el("option", null, o.label); x.value = o.key; return x; }));
+      $("sport").value = p.sport;
+      $("posFilter").replaceChildren(...[["", "All positions"], ...p.positions.map(x => [x, x])].map(([v, t]) => { const o = el("option", null, t); o.value = v; return o; }));
+      $("search").value = ""; board.pos = ""; board.q = ""; board.picks = -1; board.assign = "auto";
+      if (p.setup) fill(p.setup);
+      loadRoster();
+    }
+    current = p; meta.default_rounds = p.default_rounds;
+    checkMode(p); lockRoster();
+    if (loadBanner) banner("");                                // a refresh clears its own old error, never a message from a button you pressed
+    renderStatus(p); render(); renderAssign();
+  } catch (x) { banner(x.msg); loadBanner = true; }
+}
+
+$("save").onclick = async () => {
+  FIELDS.forEach(f => touched.add(f));
+  if (Object.keys(render()).length) return;
+  const body = {draft_type: $("type").value};
+  ["teams", "my_slot", "budget", "rounds"].forEach(f => body[f] = $(f).value.trim());
+  try {
+    const p = await api("/draft/setup", {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    FIELDS.forEach(f => delete serverErr[f]); touched.clear(); banner("Draft setup saved.", true); current = p; checkMode(p); renderStatus(p); render(); renderAssign();
+    live();
+  } catch (x) {
+    if (x.errors) { Object.assign(serverErr, x.errors); Object.keys(x.errors).forEach(f => touched.add(f)); banner("Please fix the highlighted fields."); render(); }
+    else banner(x.msg);
+  }
+};
+
+FIELDS.forEach(f => {
+  $(f).addEventListener("input", () => { touched.add(f); delete serverErr[f]; if (f === "teams" && $("my_slot").value.trim()) touched.add("my_slot"); render(); });
+  $(f).addEventListener("blur", () => { touched.add(f); render(); });
+});
+$("sport").addEventListener("change", async () => {
+  const next = $("sport").value, prev = current ? current.sport : next;
+  const hasWork = current && (current.setup || (current.status && current.status.picks_made));
+  if (hasWork && !confirm("Switching sport clears your draft setup and picks. Continue?")) { $("sport").value = prev; return; }
+  try {
+    const r = await api("/league/sport", {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({sport: next})});
+    ["teams", "my_slot", "budget", "rounds"].forEach(f => { $(f).value = ""; touched.delete(f); delete serverErr[f]; });
+    await load(true); live(); loadBlend();
+    banner(r.data_ok ? "Sport switched. Pick your draft format and teams." : "Switched, but your data has a problem: " + r.errors[0], r.data_ok);
+  } catch (x) { $("sport").value = prev; banner(x.msg); }
+});
+$("type").addEventListener("change", () => { delete serverErr.teams; render(); });
+
+// ---------- draft board: recommendations, players, pick entry, undo ----------
+const board = {mode: null, pos: "", q: "", sort: "value", hideInj: false, assign: "auto", picks: -1, busy: false, can: false, btns: [], seq: 0, last: null, sig: ""};
+const fmtNum = v => v == null ? "–" : (current && current.format === "points") ? Math.round(v).toLocaleString() : v.toFixed(1);
+const POST = body => ({method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})});
+
+function renderAssign() {
+  const p = current, setup = p && p.setup, st = p && p.status, auction = !!setup && setup.draft_type === "auction";
+  const sel = $("assignTo"), next = $("next"), note = $("entryNote");
+  const opts = [];
+  opts.push(auction ? ["", "Choose a team…"] : ["auto", st && !st.complete && st.on_clock_slot ? `Team on the clock (#${st.on_clock_slot})` : "Team on the clock"]);
+  if (setup) for (let i = 1; i <= setup.teams; i++) opts.push([String(i), `Team ${i}` + (setup.my_slot === i ? " (you)" : "")]);
+  const sig = JSON.stringify(opts);
+  if (sig !== board.sig) {                                        // rebuild only when it changed, so an open dropdown isn't reset
+    board.sig = sig;
+    sel.replaceChildren(...opts.map(([v, t]) => { const o = el("option", null, t); o.value = v; return o; }));
+  }
+  if (!opts.some(o => o[0] === board.assign)) board.assign = opts[0][0];
+  sel.value = board.assign;
+  const blocked = p && p.manual_entry_blocked;
+  sel.disabled = !setup || !!blocked;
+  $("priceBox").hidden = !auction; $("price").disabled = !!blocked;
+  next.replaceChildren();
+  if (!setup) next.textContent = "Save your draft setup to start recording picks.";
+  else if (st && st.complete) next.textContent = "The draft is complete.";
+  else if (auction) next.textContent = "Auction: when a player is sold, enter the price, choose the winning team, then press Draft on that player.";
+  else {
+    next.append("Next pick: ");
+    next.append(el("b", null, `#${st.current_pick}`));
+    next.append(` (round ${st.round}) · team ${st.on_clock_slot}${st.you_are_on_the_clock ? " (you!)" : ""} is on the clock`);
+  }
+  board.can = !!setup && !blocked && !(st && st.complete) && !(auction && !board.assign);
+  note.hidden = !(blocked || !setup);
+  note.textContent = blocked || "Save your draft setup (top left) and the Draft buttons turn on.";
+  $("undo").disabled = !!blocked || !board.last;
+  paintButtons();
+}
+
+function paintButtons() { board.btns.forEach(b => b.disabled = !board.can || board.busy); }
+
+function flags(p, big) {
+  const w = document.createDocumentFragment();
+  if (p.injury_prone) { const f = el("span", "flag", "Injury-prone"); f.title = p.avg_games_missed_pct != null ? `Missed about ${Math.round(p.avg_games_missed_pct * (p.avg_games_missed_pct <= 1 ? 100 : 1))}% of games over the last ${p.injury_seasons_used || 3} seasons` : "Misses a lot of games"; w.append(f); }
+  if (p.is_injured) { const f = el("span", "flag hurt", "Hurt now"); f.title = p.games_pct != null ? `Expected to play about ${Math.round(p.games_pct * 100)}% of games` : "Currently injured"; w.append(f); }
+  return w;
+}
+
+function goButton(p) {
+  const b = el("button", "btn sm", "Draft");
+  b.setAttribute("aria-label", "Draft " + p.name);
+  b.onclick = () => draftPlayer(p);
+  board.btns.push(b); return b;
+}
+
+async function draftPlayer(p) {
+  if (board.busy || !board.can) return;
+  board.busy = true; paintButtons();
+  try {
+    const body = {player_id: p.player_id};
+    if (board.assign !== "auto") body.team_id = parseInt(board.assign, 10);
+    if (current && current.setup && current.setup.draft_type === "auction") {
+      const raw = $("price").value.trim();
+      if (!/^\d+$/.test(raw) || parseInt(raw, 10) < 1) {
+        banner(raw === "" ? "Enter the price paid first (whole dollars, like 23)." : "The price must be a whole number of dollars, like 23.");
+        $("price").focus(); board.busy = false; paintButtons(); return;
+      }
+      body.price = parseInt(raw, 10);
+    }
+    const opts = POST(body);
+    opts.headers["Idempotency-Key"] = (self.crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;   // one per click: a retry or double click can't draft twice
+    const r = await api("/draft/pick", opts);
+    if (body.price != null) $("price").value = "";
+    banner(`Drafted ${p.name} → team ${r.team_id}${r.price ? " for $" + r.price : ""} (pick #${r.pick_number}).`, true);
+  } catch (x) { banner(x.msg); }
+  board.busy = false;
+  refreshAll();
+}
+
+
+let rosterCfg = null, rosterInfo = null;
+const rosterPicksMade = () => !!(current && current.status && current.status.picks_made > 0);
+function lockRoster() {
+  const locked = rosterPicksMade();
+  document.querySelectorAll("#rosterGrid input").forEach(i => i.disabled = locked);
+  $("rosterSave").disabled = $("rosterReset").disabled = locked;
+  if (locked) $("m-roster").textContent = "Roster slots are locked once picks are made. Start a new draft to change them.";
+}
+function rosterTotals() {
+  let st = 0, bn = 0;
+  document.querySelectorAll("#rosterGrid input").forEach(i => { const n = parseInt(i.value, 10) || 0; if (i.dataset.slot === "BN") bn += n; else st += n; });
+  $("rosterSummary").textContent = `· ${st} starters + ${bn} bench = ${st + bn} rounds`;
+}
+async function loadRoster() {
+  try {
+    const [cfg, sp] = await Promise.all([api("/league/config"), api("/sports")]);
+    rosterCfg = cfg; rosterInfo = sp.sports.find(s => s.key === sp.current);
+    const grid = $("rosterGrid"); grid.replaceChildren();
+    rosterInfo.slots.forEach(name => {
+      const lab = el("label", null, name), inp = el("input");
+      inp.type = "number"; inp.min = 0; inp.max = 20; inp.step = 1; inp.dataset.slot = name; inp.value = cfg.roster.slots[name] || 0;
+      inp.addEventListener("input", () => { $("m-roster").textContent = ""; rosterTotals(); });
+      lab.append(inp); grid.append(lab);
+    });
+    rosterTotals(); lockRoster();
+  } catch (x) { $("m-roster").textContent = x.msg || "Couldn't load the roster."; }
+}
+async function saveRoster(useDefault) {
+  if (!rosterCfg || !rosterInfo) return;
+  const slots = {};
+  for (const i of document.querySelectorAll("#rosterGrid input")) {
+    const raw = i.value.trim(), n = Number(raw);
+    if (!useDefault && (raw === "" || !Number.isInteger(n) || n < 0 || n > 20)) { $("m-roster").textContent = `${i.dataset.slot} must be a whole number from 0 to 20.`; return; }
+    const v = useDefault ? (rosterInfo.default_slots[i.dataset.slot] || 0) : n;
+    if (v) slots[i.dataset.slot] = v;
+  }
+  try {
+    const r = await api("/league/config", {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({...rosterCfg, roster: {...rosterCfg.roster, slots}})});
+    banner("Roster saved." + (r.warnings && r.warnings.length ? " " + r.warnings.join(" ") : ""), true);
+    await loadRoster(); await refreshAll();
+  } catch (x) { $("m-roster").textContent = x.msg; banner(x.msg); }
+}
+$("rosterSave").onclick = () => saveRoster(false);
+$("rosterReset").onclick = () => saveRoster(true);
+
+async function refreshAll() { await load(); if (!(await live())) { refreshBoard(); refreshRecent(); } }   // one board refresh per change, not two
+
+// Projection blend: left = the own model only, right = the reference list only. The board recomputes as you move it.
+function showBlend() {
+  const v = +$("blend").value;
+  $("blendNote").textContent = v === 0 ? "100% own model" : v === 100 ? "100% reference list" : `${100 - v}% own model · ${v}% reference list`;
+}
+async function loadBlend() {
+  try {
+    const b = await api("/projections/blend");
+    $("blendBox").style.display = b.available || b.relevant ? "" : "none";   // not basketball: nothing to show
+    $("blend").disabled = !b.available;
+    if (b.available) { $("blend").value = Math.round(b.weight * 100); showBlend(); }
+    else if (b.relevant) $("blendNote").textContent = "Blend slider unavailable. " + b.message;
+  } catch { $("blendBox").style.display = "none"; }
+}
+let blendTimer = null;
+async function applyBlend() {
+  try {
+    await api("/projections/blend", {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({weight: +$("blend").value / 100})});
+    await refreshAll(); showBlend(); $("blendNote").textContent += " (applied)";
+  } catch (x) { $("blendNote").textContent = x.msg; banner(x.msg); }
+}
+$("blend").oninput = () => { showBlend(); clearTimeout(blendTimer); blendTimer = setTimeout(applyBlend, 350); };
+
+async function refreshBoard() {
+  const my = ++board.seq, inj = "exclude_injury_prone=" + board.hideInj;
+  board.btns = [];
+  const recs = $("recs"); recs.classList.add("updating");     // the old list stays visible but greyed and unclickable until the new one is ready
+  const wrap = p => p.then(value => ({status: "fulfilled", value}), reason => ({status: "rejected", reason}));
+  const recP = wrap(api(`/recommend/plan?limit=8&${inj}`));  // the slow one: it simulates the other teams' picks
+  const avP = wrap(api(`/players/available?limit=60&${inj}&position=${encodeURIComponent(board.pos)}&q=${encodeURIComponent(board.q)}&sort=${board.sort}`));
+  avP.then(a => { if (my === board.seq) { renderPlayers(a); paintButtons(); } });
+  const r = await recP;
+  if (my !== board.seq) return;                                   // a newer request is already on its way
+  recs.classList.remove("updating");
+  renderRecs(r); paintButtons();
+}
+
+function failed(box, res, what) {
+  box.replaceChildren(el("p", "note", `Couldn't load ${what}: ${res.reason && res.reason.msg || "unknown error"}`));
+  const b = el("button", "btn sm ghost", "Try again"); b.onclick = refreshBoard; box.append(b);
+}
+
+function renderRecs(res) {
+  const box = $("recs");
+  if (res.status !== "fulfilled") return failed(box, res, "recommendations");
+  const picks = (res.value && res.value.picks) || [], plan = (res.value && res.value.plan) || {};
+  if (!picks.length) { box.replaceChildren(el("p", "note", "No players left to recommend.")); return; }
+  const f = current && current.format, list = el("div");
+  if (plan.headline) list.append(el("p", "info", plan.headline));
+  picks.forEach((r, i) => {
+    const row = el("div", "rec"), nm = el("div", "nm", `${i + 1}. ${r.name}`);
+    nm.append(flags(r));
+    const gain = el("span", "gain" + (r.team_gain < 0 ? " neg" : ""), sgn(r.team_gain, f));
+    const why = el("div", "why");
+    why.append(`${(r.positions || []).join("/")} · overall #${r.projected_rank ?? "–"}${r.pos_rank ? " · " + r.pos_rank : ""} · adds `, gain, " to your team");
+    if (r.bid != null) {
+      why.append(" · worth about ", el("span", "price", "$" + r.bid));
+      const mx = current && current.auction && current.auction.mine && current.auction.mine.max_bid;
+      if (mx != null && r.bid > mx) why.append(` (you can bid at most $${mx})`);
+    }
+    const go = goButton(r); go.classList.add("go");
+    row.append(nm, why);
+    if (r.why) row.append(el("div", "why" + (r.wasted ? " neg" : ""), r.why));
+    if (r.note) row.append(el("div", "why", r.note));
+    row.append(go);
+    list.append(row);
+  });
+  const foot = plan.status === "ok"
+    ? "Ranked by what each player adds to YOUR roster, plus whether he is likely to last until your next turn. The 'likely to last' odds are an estimate that assumes the other teams follow a typical pre-draft ranking."
+    : "Ranked by what each player adds to your finished roster. Every starting slot has to be filled, so a pick that can't fill an open slot (a wasted pick) shows a negative number." + (plan.reason ? " " + plan.reason : "");
+  box.replaceChildren(list, el("p", "note", foot));
+}
+
+function bidCell(p, auc) {
+  if (!auc) return el("span", "vl", fmtNum(p.vorp));
+  const c = el("span", "vl price", p.bid == null ? "–" : "$" + p.bid);
+  if (p.pre_bid != null) c.title = `Pre-draft price list: $${p.pre_bid}. Value over replacement: ${fmtNum(p.vorp)}`;
+  return c;
+}
+
+function renderPlayers(res) {
+  const box = $("players");
+  if (res.status !== "fulfilled") return failed(box, res, "players");
+  if (!res.value.length) { box.replaceChildren(el("p", "note", board.q || board.pos || board.hideInj ? "No available players match those filters." : "No players left.")); return; }
+  const auc = res.value.some(p => p.bid != null), list = el("div", "plist" + (auc ? " auc" : "")), head = el("div", "pr head");
+  ["Rank", "Player", "Pos", auc ? "Bid" : "Value", ""].forEach((t, i) => head.append(el("span", i === 3 ? "vl" : i === 2 ? "pos" : "", t)));
+  list.append(head);
+  res.value.forEach(p => {
+    const row = el("div", "pr"), nm = el("span", "nm", p.name);
+    nm.append(flags(p));
+    if (p.pos_rank) nm.append(el("span", "sub2", p.pos_rank));
+    row.append(el("span", "rk", p.projected_rank ?? "–"), nm, el("span", "pos", (p.eligible_positions || []).join("/")),
+               bidCell(p, auc), goButton(p));
+    list.append(row);
+  });
+  box.replaceChildren(list, el("p", "note", auc ? "Bid = what he's worth now, given the money and players left (hover for his pre-draft price). Showing the best 60 that match."
+    : "Value = how far above a replacement-level player at his position. Showing the best 60 that match."));
+}
+
+async function refreshRecent() {
+  const box = $("recent");
+  try {
+    const r = await api("/draft/recent?limit=15");
+    box.replaceChildren(el("h2", null, `Pick log (${r.total})`));
+    board.last = r.picks[0] || null;
+    if (!r.picks.length) box.append(el("p", "note", "No picks yet."));
+    else {
+      const l = el("div", "plog");
+      r.picks.forEach(p => { const d = el("div", p.mine ? "mine" : ""); d.append(el("span", "n", "#" + p.pick_number), el("span", null, p.player || "Unmatched player"), el("span", null, (p.mine ? "You" : "Team " + p.team_id) + (p.price ? " · $" + p.price : ""))); l.append(d); });
+      box.append(l);
+    }
+    renderAssign();
+  } catch (x) { box.replaceChildren(el("h2", null, "Pick log"), el("p", "note", x.msg)); }
+}
+
+$("assignTo").addEventListener("change", () => { board.assign = $("assignTo").value; renderAssign(); });
+$("posFilter").addEventListener("change", () => { board.pos = $("posFilter").value; refreshBoard(); });
+$("sortBy").addEventListener("change", () => { board.sort = $("sortBy").value; refreshBoard(); });
+$("hideInj").addEventListener("change", () => { board.hideInj = $("hideInj").checked; refreshBoard(); });
+let searchTimer = null;
+$("search").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { board.q = $("search").value.trim(); refreshBoard(); }, 250); });
+$("undo").onclick = async () => {
+  if (!board.last) return;
+  const last = board.last;
+  if (!confirm(`Remove pick #${last.pick_number}${last.player ? " (" + last.player + ")" : ""}?`)) return;
+  try { await api("/draft/undo", POST()); banner(`Removed pick #${last.pick_number}${last.player ? " (" + last.player + ")" : ""}.`, true); } catch (x) { banner(x.msg); }
+  refreshAll();
+};
+
+loadBlend(); load(true); live(); timer = setInterval(tick, 5000);
+</script>
+</body>
+</html>
+
+
+
+

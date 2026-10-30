@@ -1,0 +1,21 @@
+# Render blueprint. MULTI_SESSION=1 gives every browser its own private in-memory draft (nothing is written to disk).
+# Free instances sleep when idle and lose all drafts on restart.
+services:
+  - type: web
+    name: fantasy-draft-engine
+    runtime: docker
+    plan: free
+    healthCheckPath: /health/data
+    envVars:
+      - key: SPORT
+        value: nba
+      - key: LEAGUE_PRESET
+        value: espn_default
+      - key: DRAFT_PLATFORM
+        value: manual
+      - key: MULTI_SESSION
+        value: "1"
+      - key: MAX_SESSIONS
+        value: "100"
+      - key: SESSION_HOURS
+        value: "3"
