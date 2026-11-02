@@ -16,6 +16,7 @@ from . import auction, draft, ingestion, live_blend, lookahead, optimizer, persi
 from .config import LeagueConfig, ScoringType
 from .connectors import PLATFORMS, check_env, get_source
 from .state import _current, next_version, sessions, state
+from pipeline import events as pevents
 
 load_dotenv()
 try:
@@ -133,6 +134,56 @@ def _make_mock():
 
 
 # ---------------------------------------------------------------------------------------------------------------------
+# Event pipeline (basketball). Facts arrive as small idempotent events; the log is folded into adjustments and everything is recomputed
+# once per batch. See pipeline/ for the store, the sources and the replay tool.
+# ---------------------------------------------------------------------------------------------------------------------
+def _store():
+    from pipeline.store import Store
+    with state.lock:
+        if state.pipeline_store is None:
+            state.pipeline_store = Store(":memory:" if sessions.enabled else persist.DATA_DIR / "pipeline.sqlite")
+        return state.pipeline_store
+
+
+def _load_events() -> None:
+    """Single-user startup: fold the events saved from earlier runs back into the projections."""
+    if sessions.enabled or state.config.sport != "nba" or not (persist.DATA_DIR / "pipeline.sqlite").exists():
+        return
+    try:
+        known = set(state.names)
+        state.event_layer = pevents.fold([e for e in _store().events() if e.player_id in known])
+        if state.event_layer:
+            _apply_overrides()
+            print(f"[events] restored adjustments for {len(state.event_layer)} player(s) from the event log.")
+    except Exception as e:
+        state.event_layer = {}
+        print(f"[events] couldn't restore the event log ({type(e).__name__}: {e}); starting without it.")
+
+
+def _resolve_event_player(q: str) -> str:
+    from .own_model import norm_name
+    q = q.strip()
+    if q in state.names:
+        return q
+    target = norm_name(q)
+    if q.lower().startswith("br:"):                                   # a Basketball-Reference id, via the crosswalk
+        key = _store().key_for("br", q[3:])
+        if key is None:
+            raise ValueError(f"No player is linked to '{q}'. Run python -m pipeline ingest first, or use the name.")
+        target = key
+    hits = [pid for pid, n in state.names.items() if norm_name(n) == target]
+    if not hits:
+        raise ValueError(f"No player matches '{q}'.")
+    if len(hits) > 1:
+        raise ValueError(f"'{q}' matches {len(hits)} players: " + ", ".join(state.names[h] for h in hits[:4]) + ". Use the full name or player_id.")
+    return hits[0]
+
+
+class EventsBody(BaseModel):
+    events: list[dict]
+
+
+# ---------------------------------------------------------------------------------------------------------------------
 # Live per-player overrides (basketball): "he is out 20 games", "his minutes dropped". They rebuild raw_df from the pristine
 # projections, so every value, rank, recommendation, team score and the pace benchmark is recomputed from the edited numbers.
 # ---------------------------------------------------------------------------------------------------------------------
@@ -141,25 +192,36 @@ def _override_file() -> Path:
 
 
 def _apply_overrides() -> None:
+    """Rebuild raw_df from the pristine projections. Two layers of adjustments sit on top: facts folded from the event log (injury news,
+    trades) and your manual what-if overrides, which win. One call = one recompute, however many things changed."""
     base = state.base_raw_df
     df = base.copy()
     sp = sports.get_sport(state.config.sport)
     comps = [c for g in sp.groups for c in g.components if c in df.columns and c != "GP"]
-    if state.overrides:
+    pids = list(dict.fromkeys(list(state.event_layer) + list(state.overrides)))
+    if pids:
         df[comps + ["GP"]] = df[comps + ["GP"]].astype(float)      # whole-number columns can't hold scaled values (pandas 3 refuses)
-    for pid, o in state.overrides.items():
+    for pid in pids:
         hit = df.index[df["player_id"] == pid]
         if len(hit) == 0:
             continue
         i = hit[0]
+        ev, man = state.event_layer.get(pid, {}), state.overrides.get(pid, {})
         gp0, mpg0 = float(df.at[i, "GP"]), float(df.at[i, "MIN"]) / float(df.at[i, "GP"])
-        g = o.get("games") if o.get("games") is not None else gp0
-        m = o.get("mpg") if o.get("mpg") is not None else mpg0
+        g = gp0
+        if ev.get("games"):
+            spec = ev["games"]
+            g = max(1.0, min(gp0, gp0 - spec["n"])) if spec["kind"] == "out" else float(max(1, min(82, spec["n"])))
+        if man.get("games") is not None:
+            g = man["games"]
+        m = man["mpg"] if man.get("mpg") is not None else ev.get("mpg", mpg0)
         f = (g / gp0) * (m / mpg0)
         for c in comps:
             df.at[i, c] = float(df.at[i, c]) * f
         df.at[i, "GP"] = g
         df.at[i, "MIN"] = m * g
+        if ev.get("team") and "team" in df.columns:
+            df.at[i, "team"] = ev["team"]
     state.raw_df = df
     state.data_version = next_version()
 
@@ -321,6 +383,10 @@ def load_sport(key: str, preset: str | None = None) -> dict:
     history = ingestion.load_stats_history(key)
     state.config, state.raw_df, state.cleaning, state.history = cfg, raw, cleaning, history
     state.base_raw_df, state.overrides = raw.copy(), {}
+    state.event_layer = {}
+    if state.pipeline_store is not None:
+        state.pipeline_store.close()
+        state.pipeline_store = None
     state.data_version = next_version()
     state.names = dict(zip(raw["player_id"], raw["name"]))
     state.name_map = ingestion.build_name_map(raw)
@@ -336,6 +402,7 @@ def load_sport(key: str, preset: str | None = None) -> dict:
     _scorer_cache.clear()
     _init_blend()
     _load_saved_overrides()
+    _load_events()
     report = validate.build_report(state.raw_df, cfg, history, cleaning)
     validate.print_summary(report)
     return report
@@ -384,6 +451,10 @@ async def lifespan(app: FastAPI):
         make_map = lambda: {i: i for i in state.raw_df["player_id"]}
         task = asyncio.create_task(sync.run(state, _make_mock, make_map, POLL_SECONDS))
     yield
+    if state.pipeline_store is not None:
+        state.pipeline_store.close()                       # release the database file (Windows can't delete an open file)
+        state.pipeline_store = None
+    sessions.configure(False)                              # leave no hosted-mode setting or sessions behind when the app stops
     if task:
         task.cancel()
 
@@ -590,6 +661,84 @@ def set_blend(body: BlendBody):
         _apply_overrides()                                 # your what-if overrides stay on top of the new blend
         _save_blend()
         return {"available": True, "weight": state.blend}
+
+
+@app.post("/events")
+def post_events(body: EventsBody):
+    """Apply a batch of events (a recorded feed, injury news ...). Each has an event_id, so a retry changes nothing. The whole batch is applied,
+    then everything is recomputed ONCE. Events for unknown players, or with bad values, are rejected one by one without blocking the rest."""
+    if state.config.sport != "nba":
+        raise HTTPException(400, {"message": "The event pipeline is available for basketball."})
+    if not body.events or len(body.events) > pevents.MAX_BATCH:
+        raise HTTPException(400, {"message": f"Send between 1 and {pevents.MAX_BATCH} events per request."})
+    accepted, duplicates, rejected = [], [], []
+    with state.lock:
+        store = _store()
+        for n, raw in enumerate(body.events):
+            eid = raw.get("event_id") if isinstance(raw, dict) and isinstance(raw.get("event_id"), str) else f"#{n + 1}"
+            try:
+                ev = pevents.parse_event(raw)
+                pid = _resolve_event_player(ev.player)
+            except ValueError as e:
+                rejected.append({"event_id": eid, "reason": str(e)})
+                continue
+            if store.add_event(ev, pid, state.names.get(pid, "")):
+                accepted.append(ev.event_id)
+                if ev.type == "team":
+                    store.add_team_fact(pid, ev.value, ev.ts, ev.source or "event", ev.event_id)
+            else:
+                duplicates.append(ev.event_id)
+        recomputes = 0
+        if accepted:
+            known = set(state.names)
+            state.event_layer = pevents.fold([e for e in store.events() if e.player_id in known])
+            _apply_overrides()                                       # one recompute for the whole batch
+            recomputes = 1
+        return {"accepted": accepted, "duplicates": duplicates, "rejected": rejected, "recomputes": recomputes, "data_version": state.data_version}
+
+
+@app.get("/events")
+def list_events(limit: int = 50):
+    """The most recent events received, newest first."""
+    if not 1 <= limit <= 500:
+        raise HTTPException(400, {"message": "limit must be between 1 and 500."})
+    store = _store()
+    return {"count": store.event_count(), "events": store.recent_events(limit)}
+
+
+@app.get("/events/effective")
+def effective_events():
+    """What the event log currently says about each player, after folding (last write wins, in timestamp order)."""
+    with state.lock:
+        return {"players": [{"player_id": pid, "name": state.names.get(pid), **adj} for pid, adj in state.event_layer.items()]}
+
+
+@app.delete("/events")
+def clear_events():
+    with state.lock:
+        n = _store().clear_events()
+        state.event_layer = {}
+        _apply_overrides()
+        return {"cleared": n}
+
+
+@app.get("/pipeline/snapshots")
+def pipeline_snapshots():
+    """Versioned data snapshots stored by `python -m pipeline ingest` (the current one for each table is marked)."""
+    return {"snapshots": _store().snapshots()}
+
+
+@app.get("/pipeline/team-history")
+def team_history(player: str, on: str | None = None):
+    """A player's team history, effective-dated. With ?on=2026-10-28T00:00:00Z it also answers 'which team was he on then?'."""
+    try:
+        pid = _resolve_event_player(player)
+        when = pevents.normalize_ts(on) if on else None
+    except ValueError as e:
+        raise HTTPException(400, {"message": str(e)})
+    store = _store()
+    return {"player_id": pid, "name": state.names.get(pid), "history": store.team_history(pid),
+            **({"on": when, "team_on": store.team_on(pid, when)} if when else {})}
 
 
 @app.get("/players/overrides")

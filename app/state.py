@@ -22,6 +22,8 @@ class GlobalState:
     overrides: dict = field(default_factory=dict)                  # player_id -> {games, mpg, note}: live what-if edits (NBA)
     lock: object = field(default_factory=threading.RLock, repr=False, compare=False)       # held while the draft is changed: one writer at a time
     idem: OrderedDict = field(default_factory=OrderedDict, repr=False, compare=False)      # Idempotency-Key -> the pick it created
+    event_layer: dict = field(default_factory=dict)                # player_id -> adjustments folded from the event log (under manual overrides)
+    pipeline_store: object = None                                  # SQLite store of events and snapshots (file when single-user, memory when hosted)
     blend: float | None = None                                     # live blend weight toward the reference list (None = not available)
     data_version: int = 0                                          # bumps whenever raw_df changes, so every cache is rebuilt
     draft_log: list[dict] = field(default_factory=list)            # [{pick_number, player_id, team_id, source}]

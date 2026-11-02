@@ -1,10 +1,14 @@
 # Fantasy Draft Engine
 
+[![tests](https://github.com/mtquach1/fantasy-draft-engine/actions/workflows/tests.yml/badge.svg)](https://github.com/mtquach1/fantasy-draft-engine/actions/workflows/tests.yml)
+
+**Live demo:** https://fantasy-draft-engine.onrender.com (fake sample data, free hosting that sleeps after 15 minutes idle, so the first load can take a minute; every browser gets its own private draft that is forgotten on restart).
+
 A draft assistant for fantasy basketball (baseball and football profiles are included too). It projects every player with its own
 model, values them for **your** league's scoring and roster, and during a draft recommends the pick that adds the most to *your*
 lineup. It never drafts for you: you make the pick on ESPN/Yahoo yourself.
 
-Python, FastAPI, pandas, NumPy, SciPy. One static page (vanilla JS), 232 automated tests.
+Python, FastAPI, pandas, NumPy, SciPy. One static page (vanilla JS), 396 automated tests, run in CI on Python 3.12 and 3.13.
 
 ## What it does
 - **Own projection model** (`app/own_model.py`): per-minute production, minutes and games from past seasons, with shrinkage toward
@@ -30,11 +34,11 @@ Python, FastAPI, pandas, NumPy, SciPy. One static page (vanilla JS), 232 automat
 ## Quick start (Windows, from the project folder)
 ```
 pip install -r requirements.txt
-pytest                                   # 232 tests
+pytest                                   # 396 tests
 python make_sample_sport.py nba          # FAKE sample data, to try the app right away
 uvicorn app.main:app --reload            # open http://127.0.0.1:8000/
 ```
-With Docker: `docker compose up` (generates fake sample data when `data/` is empty). Not yet built or run by the author.
+With Docker: `docker compose up` (generates fake sample data when `data/` is empty). The image builds and runs on Render (see the live demo); `docker compose` itself has not been run locally by the author.
 
 ## Using real data
 1. Download Basketball-Reference per-game tables for three seasons into `data/nba/raw/` and name them by the season's end year:
@@ -64,23 +68,45 @@ The own model beats "repeat last season" by 89 points (95% CI 42 to 136) and the
 remaining error is injuries, which the model does not predict.
 
 **Draft backtest** (`research/draft_backtest.py`): 36 simulated 12-team, 13-round snake drafts (all 12 slots x 3 seeds) for the 2025-26
-season using only earlier data, scored by that season's real stats. The other 11 teams draft by last season's per-game production.
+season using only earlier data, scored by that season's real stats. The other 11 teams draft by last season's per-game production. The
+"autodraft-style" baseline below takes, at my slot, the best player left by that same ranking. It is not ESPN's actual autodraft.
 
-| drafter for my slot | mean finish (of 12) |
-|---|---|
-| follows last season's ranking | 6.5 |
-| follows the own model's board, no roster logic | 1.3 |
-| uses the app's recommendations | 1.5 |
+| drafter for my slot | mean score | mean finish (of 12) |
+|---|---:|---:|
+| autodraft-style baseline (last season's ranking) | 22,053 | 6.5 |
+| follows the own model's board, no roster logic | 26,657 | 1.3 |
+| uses the app's recommendations | 26,737 | 1.5 |
 
-The projections alone beat the ranking-follower by about 4,600 season points (95% CI 3,800 to 5,400; ahead in 97% of drafts). The
-roster-aware recommendation logic added only +204 points on top, which is not statistically distinguishable from zero (CI -218 to +645).
-Honest reading: the value so far comes from the projections, not from the recommendation logic.
+The app's lineup beat the baseline by 4,684 season points (95% CI 3,831 to 5,525; ahead in 97% of the 36 paired drafts). The projections
+alone account for nearly all of it (+4,604, CI 3,776 to 5,370). The roster-aware recommendation logic added +80 points on top, which is not
+distinguishable from zero (CI -347 to +534; ahead in 47% of drafts). Honest reading: the value so far comes from the projections, not from the
+recommendation logic.
 
-Caveats: one season, and an injury-heavy one for stars. The field drafts by a simple rule; real leagues use consensus rankings that are
-harder to beat. The player pool is the model's own top 200, which favours the model. Treat these as evidence, not a guarantee.
+**Where the gap comes from** (`research/why_report.py`, same 36 drafts, starting lineups, real 2025-26 stats). The stat breakdown explains
+4,112 of the 4,684 points; the rest is probably how the score treats empty slots. Scoring volume (points plus threes) is worth +3,044,
+steals plus blocks +742, rebounding +508, assists +435. Shooting efficiency (-260) and turnovers (-357) were worse than the baseline's. The
+app's starters played 3.2 more minutes per game (33.1 vs 30.0) and scored 7.6 more fantasy points per game; games played were equal
+(65.6 vs 65.4) and so were picks who never played (0.53 each), so the gap is not injury luck. In short: bigger roles and more volume, bought at
+some cost in efficiency.
+
+**Do projected risers actually rise?** (`research/growth_check.py`, 228 players with at least 800 minutes in both seasons.) Correlation between
+the model's projected change in fantasy points per game and the real change: +0.39 (95% CI +0.28 to +0.48). Direction right for 60% of players.
+Players projected to rise gained +2.3 points per game on average, players projected to fall lost -1.2; 15 of the 20 biggest projected risers rose.
+Players aged 23 or under were projected +1.5 and really changed +3.0: right direction, but the model understates young players' growth.
+Caveats: the minutes filter favours players whose role held or grew, which biases real changes upward, and there is no age-only baseline to
+compare the 0.39 against. Rookies and role changes from trades are not forecast by the model; they enter only through `overrides.csv`, which is
+hand-entered judgment.
+
+Caveats for all of the above: one season, and an injury-heavy one for stars; simulated opponents following one simple rule, while real leagues
+use consensus rankings that are harder to beat; the player pool is the model's own top 200, which favours the model (`draft_backtest.py 3 1-12 merged`
+reruns with last season's top 200 added to the pool; that result is not reported here yet); the test season was looked at repeatedly while the
+model was built. Treat these as evidence, not a guarantee.
 
 **Agreement with a third-party board** (ESPN default points, 186 shared players): rank correlation 0.87 for the pure own model, 0.97
 at `--blend 0.5`. Closeness to another forecast is not accuracy; only the season itself can say which is better.
+
+## Data pipeline
+Ingest, quality gate, versioned snapshots with rollback, and an idempotent event feed for injury news and trades: see [docs/PIPELINE.md](docs/PIPELINE.md).
 
 ## Limits
 - The draft lock is per process. Running several server workers would need a shared store (for example Redis) so they agree on the pick log;
@@ -90,7 +116,8 @@ at `--blend 0.5`. Closeness to another forecast is not accuracy; only the season
 - No rookies in the model itself (add them in `overrides.csv`), no trade or role-change awareness beyond what you put in overrides.
 - Yahoo and ESPN live sync have never run against a real league and are experimental. Manual mode is the tested path.
 - Basketball only for live overrides; no schedule effects and no automatic punting in category leagues.
-- Docker, Render and the CI workflow are written but were not built or run by the author.
+- Hosting is a free tier with fake sample data: it sleeps when idle and has no monitoring or load testing yet. CI runs the tests only.
+- The data pipeline has never run against a live feed (see `docs/PIPELINE.md`).
 
 ## Layout
 ```
@@ -99,6 +126,7 @@ app/valuation.py     z-scores, value over replacement, ranks
 app/optimizer.py     lineup assignment      app/recommend.py   pick recommendations
 app/scoring.py       team score and pace    app/draft.py       snake/linear/auction order and validation
 app/main.py          API                    app/static/index.html   the Draft Room page
+pipeline/            data pipeline: sources, quality gate, snapshots, events, replay (docs/PIPELINE.md)
 build_own_model.py   data builder           research/          backtests (reproduce the numbers above)
-tests/               232 tests              Dockerfile, docker-compose.yml, render.yaml, .github/workflows/tests.yml
+tests/               396 tests              Dockerfile, docker-compose.yml, render.yaml, .github/workflows/tests.yml
 ```

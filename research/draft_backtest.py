@@ -9,7 +9,10 @@ Uses only what existed before that season: your per-game files up to 2024-25 (th
      bot           the app's top recommendation, GET /recommend (projections + roster-aware logic)
  - scoring: the REAL 2025-26 stats (hindsight), lineup chosen optimally under the ESPN default roster; a drafted player who never
    played counts as nothing (the slot is filled from the waiver pool), so injuries hurt both sides, unforeseeably.
-Run from the project root:  python research/draft_backtest.py [seeds=3] [slots=1-12]"""
+Run from the project root:  python research/draft_backtest.py [seeds=3] [slots=1-12] [pool=model|merged]
+   pool=model   (default) the player pool is the own model's top 200 (the published numbers use this)
+   pool=merged  the model's top 200 plus last season's top 200 by production, so the baseline can take players the model dislikes;
+                results go to draft_backtest_results_merged.csv and the default file is left alone"""
 import os, sys, tempfile, random, time
 from pathlib import Path
 
@@ -31,6 +34,8 @@ seeds = int(sys.argv[1]) if len(sys.argv) > 1 else 3
 slots = range(1, TEAMS + 1)
 if len(sys.argv) > 2:
     a, _, b = sys.argv[2].partition("-"); slots = range(int(a), int(b or a) + 1)
+pool_mode = sys.argv[3] if len(sys.argv) > 3 else "model"
+assert pool_mode in ("model", "merged"), "third argument must be 'model' or 'merged'"
 
 real_nba = ingestion.DATA_DIR / "nba"
 files = om.find_seasons(real_nba / "raw"); yrs = sorted(files)
@@ -39,12 +44,12 @@ a_y, b_y, c_y = yrs[-3:]
 S = {y: om.load_season(files[y]) for y in (a_y, b_y, c_y)}
 p = om.Params(); beta, _ = om.fit_age_from_transition(S, [a_y, b_y], p)
 proj = om.project_next(S, [b_y, a_y], p, beta)                       # what a drafter could have known before season c
-pool = proj.head(POOL)
-print(f"seasons: model history {a_y}-{b_y}, drafted for season ending {c_y}; pool {len(pool)} players", flush=True)
+pool = proj.head(POOL) if pool_mode == "model" else om.merged_pool(proj, S[b_y], POOL)
+print(f"seasons: model history {a_y}-{b_y}, drafted for season ending {c_y}; pool ({pool_mode}) {len(pool)} players", flush=True)
 
 tmp = Path(tempfile.mkdtemp()); (tmp / "nba").mkdir()
 ingestion.DATA_DIR = tmp; persist.DATA_DIR = Path(tempfile.mkdtemp())
-om.to_app_frame(pool, POOL).to_csv(tmp / "nba" / "players.csv", index=False)
+om.to_app_frame(pool, len(pool)).to_csv(tmp / "nba" / "players.csv", index=False)
 
 cfg = LeagueConfig.for_sport("nba", "espn_default"); cfg.roster.teams = TEAMS
 # ruler: the real stats of season c
@@ -73,6 +78,18 @@ names_of = {v: k for k, v in idP.items()}
 def noisy_pick(avail, pick_no, seed):
     rng = random.Random(seed * 100003 + pick_no)
     return min(avail, key=lambda k: ADP[k] + rng.gauss(0, 1.5 + 0.08 * ADP[k]))
+
+STAT_COLS = ["GP", "MIN", "PTS", "REB", "AST", "STL", "BLK", "3PM", "TO", "FGM", "FGA", "FTM", "FTA"]
+
+def lineup_stats(keys):
+    """REAL season totals of the starting lineup this roster would field (same assignment the score uses), summed per stat."""
+    idx = [scR.pos[idR[k]] for k in keys if k in idR]
+    _, keep = scR.assign(idx)
+    starters = [idx[a] for a, b in keep if not scR.bn[b]]
+    rows = scR.pre.iloc[starters]
+    out = {f"st_{c}": float(rows[c].sum()) for c in STAT_COLS if c in rows.columns}
+    out["st_n"] = len(starters)
+    return out
 
 def actual_score(rosters):
     return np.array([scR.score([scR.pos[idR[k]] for k in r if k in idR]) for r in rosters])
@@ -107,9 +124,9 @@ with TestClient(__import__("app.main", fromlist=["app"]).app) as c:
                 sc = actual_score(r)
                 dnp = sum(1 for k in r[s - 1] if k not in idR)
                 rows.append(dict(seed=seed, slot=s, who=label, score=sc[s - 1], rank=int((sc > sc[s - 1]).sum()) + 1,
-                                 beaten=float((sc < sc[s - 1]).sum()) / (TEAMS - 1), dnp=dnp))
+                                 beaten=float((sc < sc[s - 1]).sum()) / (TEAMS - 1), dnp=dnp, **lineup_stats(r[s - 1])))
             print(f"seed {seed} slot {s:2d} done ({time.time() - t0:.0f}s)", flush=True)
-df = pd.DataFrame(rows); df.to_csv(ROOT / "research" / "draft_backtest_results.csv", index=False)
+df = pd.DataFrame(rows); df.to_csv(ROOT / "research" / ("draft_backtest_results.csv" if pool_mode == "model" else "draft_backtest_results_merged.csv"), index=False)
 pv = df.pivot_table(index=["seed", "slot"], columns="who", values=["score", "rank", "beaten", "dnp"])
 rng = np.random.default_rng(0)
 def cmp(a, b, what):

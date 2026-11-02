@@ -142,6 +142,18 @@ def project_next(seasons: dict, years, p: Params, beta, min_total_mins=800) -> p
     return out.sort_values("fpts", ascending=False)
 
 
+def merged_pool(proj: pd.DataFrame, last: pd.DataFrame, n: int, min_games: float = 55.) -> pd.DataFrame:
+    """The model's top n players PLUS last season's top n by per-game production x max(games, min_games) (what an unprepared drafter ranks by).
+    Keeps the model's order. Used by the draft backtest so that players the model dislikes but other drafters like are still in the pool:
+    with only the model's own top n, the baseline could never take them, which flatters the model."""
+    mine = proj.head(n).index
+    fpg = last["fpg"].reindex(proj.index)
+    games = last["G"].reindex(proj.index).fillna(0).clip(lower=min_games)
+    theirs = (fpg * games).dropna().sort_values(ascending=False).head(n).index
+    keep = set(mine) | set(theirs)
+    return proj.loc[[i for i in proj.index if i in keep]]
+
+
 def to_app_frame(proj: pd.DataFrame, top_n=300) -> pd.DataFrame:
     """The columns data/nba/players.csv needs. Totals, not per game."""
     p = proj.head(top_n)

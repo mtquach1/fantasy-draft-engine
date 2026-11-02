@@ -20,4 +20,5 @@ players_third_party.csv
 overrides_suggested.csv
 players.previous.csv
 
-check_before_github.py
+# derived from your per-game files (player-level): never publish
+research/growth_check_players.csv

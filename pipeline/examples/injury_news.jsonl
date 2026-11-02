@@ -1,0 +1,7 @@
+# DEMO FEED: these events are INVENTED to show the replay tool. They are not real news. Player names match the real-data build.
+# Two events seconds apart form one burst (one recompute); a later pair forms a second burst. Replay twice to see idempotency.
+{"event_id": "demo-001", "type": "games_out", "player": "Jayson Tatum", "value": 20, "ts": "2026-10-28T14:00:00Z", "source": "demo", "note": "invented: minor knee soreness"}
+{"event_id": "demo-002", "type": "mpg", "player": "Jaylen Brown", "value": 30, "ts": "2026-10-28T14:00:00.5Z", "source": "demo", "note": "invented: role change"}
+{"event_id": "demo-003", "type": "team", "player": "Jaylen Brown", "value": "PHI", "ts": "2026-10-28T14:00:00.9Z", "source": "demo"}
+{"event_id": "demo-004", "type": "games_out", "player": "Stephen Curry", "value": 15, "ts": "2026-10-28T14:05:00Z", "source": "demo", "note": "invented"}
+{"event_id": "demo-005", "type": "clear", "player": "Jayson Tatum", "ts": "2026-10-28T14:05:01Z", "source": "demo", "note": "invented: cleared to play"}

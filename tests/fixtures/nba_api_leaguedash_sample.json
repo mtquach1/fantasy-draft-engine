@@ -1,0 +1,68 @@
+{
+ "_note": "HAND-MADE sample in the documented response shape. It was NOT recorded from the live service.",
+ "resource": "leaguedashplayerstats",
+ "parameters": {
+  "Season": "2025-26"
+ },
+ "resultSets": [
+  {
+   "name": "LeagueDashPlayerStats",
+   "headers": [
+    "PLAYER_ID",
+    "PLAYER_NAME",
+    "TEAM_ABBREVIATION",
+    "GP",
+    "MIN",
+    "PTS",
+    "REB",
+    "AST",
+    "STL",
+    "BLK",
+    "TOV",
+    "FGM",
+    "FGA",
+    "FTM",
+    "FTA",
+    "FG3M"
+   ],
+   "rowSet": [
+    [
+     1627759,
+     "Jaylen Brown",
+     "PHI",
+     71,
+     34.4,
+     28.7,
+     6.9,
+     5.1,
+     1.0,
+     0.4,
+     3.6,
+     10.6,
+     22.3,
+     5.1,
+     6.4,
+     2.0
+    ],
+    [
+     1628369,
+     "Jayson Tatum",
+     "BOS",
+     70,
+     36.2,
+     26.7,
+     8.6,
+     5.8,
+     1.1,
+     0.5,
+     2.8,
+     9.1,
+     20.0,
+     5.0,
+     6.1,
+     3.4
+    ]
+   ]
+  }
+ ]
+}
