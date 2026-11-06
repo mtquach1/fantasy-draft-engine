@@ -4,11 +4,13 @@
 
 **Live demo:** https://fantasy-draft-engine.onrender.com (fake sample data, free hosting that sleeps after 15 minutes idle, so the first load can take a minute; every browser gets its own private draft that is forgotten on restart).
 
+**Tech stack:** Python 3.12/3.13 · FastAPI · pandas · NumPy · SciPy · SQLite · vanilla JavaScript (no build step) · pytest · GitHub Actions · Docker · Render
+
 A draft assistant for fantasy basketball (baseball and football profiles are included too). It projects every player with its own
 model, values them for **your** league's scoring and roster, and during a draft recommends the pick that adds the most to *your*
 lineup. It never drafts for you: you make the pick on ESPN/Yahoo yourself.
 
-Python, FastAPI, pandas, NumPy, SciPy. One static page (vanilla JS), 396 automated tests, run in CI on Python 3.12 and 3.13.
+509 automated tests run in CI on Python 3.12 and 3.13. The whole front end is one static page.
 
 ## What it does
 - **Own projection model** (`app/own_model.py`): per-minute production, minutes and games from past seasons, with shrinkage toward
@@ -34,7 +36,7 @@ Python, FastAPI, pandas, NumPy, SciPy. One static page (vanilla JS), 396 automat
 ## Quick start (Windows, from the project folder)
 ```
 pip install -r requirements.txt
-pytest                                   # 396 tests
+pytest                                   # 509 tests
 python make_sample_sport.py nba          # FAKE sample data, to try the app right away
 uvicorn app.main:app --reload            # open http://127.0.0.1:8000/
 ```
@@ -97,6 +99,16 @@ Caveats: the minutes filter favours players whose role held or grew, which biase
 compare the 0.39 against. Rookies and role changes from trades are not forecast by the model; they enter only through `overrides.csv`, which is
 hand-entered judgment.
 
+**Current-season check.** `python research/draft_backtest.py 3 1-12 model --inseason` drafts for the season in progress, using a partial-season
+table kept in `data/nba/inseason/` (never in `data/nba/raw`), and `python research/mock_rank.py` ranks the teams of a recorded mock draft by real
+stats. Early in a season both are very noisy (a handful of games per player), so no results from them are reported here.
+
+**Calibrating the look-ahead.** The look-ahead assumes the other drafters follow a ranking with noise that grows with rank (2.0 + 0.12 x rank, a
+guess). `python research/calibrate_lookahead.py [draft files]` fits that noise to real draft logs and checks the "X% likely to last" odds against
+what actually happened (a reliability table and Brier score, with a bootstrap interval and, given two or more drafts, a check on a draft the fit
+did not see). `python espn_check.py export` saves a real ESPN league's picks, finished or in progress, in the same format. On drafts simulated from
+a planted noise model the fit recovers the planted noise (`tests/test_calibration.py`). Results from real drafts are not reported here yet.
+
 Caveats for all of the above: one season, and an injury-heavy one for stars; simulated opponents following one simple rule, while real leagues
 use consensus rankings that are harder to beat; the player pool is the model's own top 200, which favours the model (`draft_backtest.py 3 1-12 merged`
 reruns with last season's top 200 added to the pool; that result is not reported here yet); the test season was looked at repeatedly while the
@@ -104,6 +116,22 @@ model was built. Treat these as evidence, not a guarantee.
 
 **Agreement with a third-party board** (ESPN default points, 186 shared players): rank correlation 0.87 for the pure own model, 0.97
 at `--blend 0.5`. Closeness to another forecast is not accuracy; only the season itself can say which is better.
+
+## Operating it
+Every response carries an `X-Request-ID` header (a valid one sent by the caller is kept). With `REQUEST_LOG=1` the server prints one line per
+request (JSON when `LOG_FORMAT=json`) with the method, route, status, duration and request id; query strings, cookies and bodies are never logged.
+`GET /metrics` serves Prometheus-format counters and duration histograms by route, and `GET /metrics/summary` serves p50/p95/p99 per route from
+the most recent requests; set `METRICS_TOKEN` to require a bearer token. Metrics are in memory and per process. Unknown URLs are all counted as
+one "unmatched" route so the metrics cannot grow without bound.
+
+A hosted copy can show a banner at the top of the page by setting `DEMO_NOTICE` (the Docker image sets a default one whenever it had to invent sample data, so
+a visitor is never left wondering why the players are made up).
+
+`python research/load_test.py --url https://your-app.onrender.com --users 5 --duration 20` drives a hosted copy with simulated browsers (each with
+its own private draft): it lists players, asks for recommendations, drafts with idempotency keys, resends picks to check retries are harmless, and
+reports p50/p95/p99 per endpoint, the error rate, and correctness checks. It refuses to run against a single-user server (it would overwrite the
+draft) unless told to. Numbers describe that server, your network and that moment; the first request is reported separately because a sleeping
+free-tier host takes a while to wake.
 
 ## Data pipeline
 Ingest, quality gate, versioned snapshots with rollback, and an idempotent event feed for injury news and trades: see [docs/PIPELINE.md](docs/PIPELINE.md).
@@ -128,5 +156,8 @@ app/scoring.py       team score and pace    app/draft.py       snake/linear/auct
 app/main.py          API                    app/static/index.html   the Draft Room page
 pipeline/            data pipeline: sources, quality gate, snapshots, events, replay (docs/PIPELINE.md)
 build_own_model.py   data builder           research/          backtests (reproduce the numbers above)
-tests/               396 tests              Dockerfile, docker-compose.yml, render.yaml, .github/workflows/tests.yml
+tests/               509 tests              Dockerfile, docker-compose.yml, render.yaml, .github/workflows/tests.yml
 ```
+
+## License
+MIT: see [LICENSE](LICENSE). The projection data you supply (Basketball-Reference tables, ESPN lists) stays on your machine, is never committed, and is not covered by this license.

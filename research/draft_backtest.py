@@ -9,10 +9,12 @@ Uses only what existed before that season: your per-game files up to 2024-25 (th
      bot           the app's top recommendation, GET /recommend (projections + roster-aware logic)
  - scoring: the REAL 2025-26 stats (hindsight), lineup chosen optimally under the ESPN default roster; a drafted player who never
    played counts as nothing (the slot is filled from the waiver pool), so injuries hurt both sides, unforeseeably.
-Run from the project root:  python research/draft_backtest.py [seeds=3] [slots=1-12] [pool=model|merged]
+Run from the project root:  python research/draft_backtest.py [seeds=3] [slots=1-12] [pool=model|merged] [--inseason]
    pool=model   (default) the player pool is the own model's top 200 (the published numbers use this)
    pool=merged  the model's top 200 plus last season's top 200 by production, so the baseline can take players the model dislikes;
-                results go to draft_backtest_results_merged.csv and the default file is left alone"""
+                results go to draft_backtest_results_merged.csv and the default file is left alone
+   --inseason   drafts for the season IN PROGRESS: reads data/nba/inseason/per_game_<year>.csv (a partial season, never put it in data/nba/raw)
+                and scores on the stats so far. Results go to a file with _inseason in its name. Early in a season this is noisy."""
 import os, sys, tempfile, random, time
 from pathlib import Path
 
@@ -29,6 +31,9 @@ from app.draft import slot_for_pick                     # noqa: E402
 from app.scoring import TeamScorer                      # noqa: E402
 from app.valuation import calculate_player_valuations   # noqa: E402
 
+INSEASON = "--inseason" in sys.argv
+if INSEASON:
+    sys.argv.remove("--inseason")
 TEAMS, ROUNDS, POOL = 12, 13, 200
 seeds = int(sys.argv[1]) if len(sys.argv) > 1 else 3
 slots = range(1, TEAMS + 1)
@@ -38,8 +43,14 @@ pool_mode = sys.argv[3] if len(sys.argv) > 3 else "model"
 assert pool_mode in ("model", "merged"), "third argument must be 'model' or 'merged'"
 
 real_nba = ingestion.DATA_DIR / "nba"
-files = om.find_seasons(real_nba / "raw"); yrs = sorted(files)
-assert len(yrs) >= 3, "need three per-game seasons in data/nba/raw"
+files = om.find_seasons(real_nba / "raw")
+if INSEASON:
+    cur = om.find_seasons(real_nba / "inseason")
+    assert cur, "no per_game_<year>.csv in data/nba/inseason (save the season-so-far table there, NOT in data/nba/raw)"
+    assert min(cur) > max(files), f"the in-season file (season {min(cur)}) must be for a season after your latest finished one ({max(files)})"
+    files.update(cur)
+yrs = sorted(files)
+assert len(yrs) >= 3, "need three per-game seasons in data/nba/raw (two finished seasons plus the one being tested)"
 a_y, b_y, c_y = yrs[-3:]
 S = {y: om.load_season(files[y]) for y in (a_y, b_y, c_y)}
 p = om.Params(); beta, _ = om.fit_age_from_transition(S, [a_y, b_y], p)
@@ -53,18 +64,11 @@ om.to_app_frame(pool, len(pool)).to_csv(tmp / "nba" / "players.csv", index=False
 
 cfg = LeagueConfig.for_sport("nba", "espn_default"); cfg.roster.teams = TEAMS
 # ruler: the real stats of season c
-act = S[c_y]; act = act[act["mins"] >= 100]
-actual = pd.DataFrame({"Name": act["Player"].values, "Team": act["Tm"].values, "Pos": act["Pos"].astype(str).str.replace("-", ",").values,
-    "playerid": ["n:" + str(n).lower() for n in act["Player"]], "GP": act["G"].values, "MIN": act["mins"].values,
-    **{k: (act[v] * act["G"]).values for k, v in {"PTS": "PTS", "REB": "TRB", "AST": "AST", "STL": "STL", "BLK": "BLK", "3PM": "TPM",
-                                                  "TO": "TOV", "FGM": "FGM", "FGA": "FGA", "FTM": "FTM", "FTA": "FTA"}.items()},
-    "is_injured": False, "note": "actual"})
-rd = Path(tempfile.mkdtemp()); (rd / "nba").mkdir(); actual.to_csv(rd / "nba" / "players.csv", index=False)
-ingestion.DATA_DIR = rd
-rawR, _ = validate.clean_projections(ingestion.load_projections("nba"), "nba")
-valR, replR = calculate_player_valuations(rawR, cfg, frozenset()); scR = TeamScorer(valR, replR, cfg)
-ingestion.DATA_DIR = tmp
-idR = {om.norm_name(n): q for n, q in zip(valR["name"], valR["player_id"])}
+from app.season_ruler import build_ruler               # noqa: E402
+scR, idR, valR = build_ruler(S[c_y], cfg)
+if INSEASON:
+    g = S[c_y][S[c_y]["mins"] >= 100]["G"]
+    print(f"NOTE: partial season. Players with 100+ minutes so far have played {g.median():.0f} games (median); 'never played' below means under 100 minutes so far.", flush=True)
 
 last = S[b_y]; adp_pts = (last["fpg"] * last["G"]).rename(index=lambda i: om.norm_name(last.loc[i, "Player"]))
 pool_keys = [om.norm_name(n) for n in pool["Name"]]
@@ -126,13 +130,14 @@ with TestClient(__import__("app.main", fromlist=["app"]).app) as c:
                 rows.append(dict(seed=seed, slot=s, who=label, score=sc[s - 1], rank=int((sc > sc[s - 1]).sum()) + 1,
                                  beaten=float((sc < sc[s - 1]).sum()) / (TEAMS - 1), dnp=dnp, **lineup_stats(r[s - 1])))
             print(f"seed {seed} slot {s:2d} done ({time.time() - t0:.0f}s)", flush=True)
-df = pd.DataFrame(rows); df.to_csv(ROOT / "research" / ("draft_backtest_results.csv" if pool_mode == "model" else "draft_backtest_results_merged.csv"), index=False)
+df = pd.DataFrame(rows); df.to_csv(ROOT / "research" / ("draft_backtest_results" + ("" if pool_mode == "model" else "_merged") + ("_inseason" if INSEASON else "") + ".csv"), index=False)
 pv = df.pivot_table(index=["seed", "slot"], columns="who", values=["score", "rank", "beaten", "dnp"])
 rng = np.random.default_rng(0)
+unit = "points so far" if INSEASON else "season points"
 def cmp(a, b, what):
     d = (pv[("score", a)] - pv[("score", b)]).values
     bs = [d[rng.integers(0, len(d), len(d))].mean() for _ in range(5000)]
-    print(f"{what:44s} {d.mean():+7.0f} season points  (95% CI {np.percentile(bs, 2.5):+.0f} to {np.percentile(bs, 97.5):+.0f}); ahead in {(d > 0).mean():.0%} of paired drafts")
+    print(f"{what:44s} {d.mean():+7.0f} {unit}  (95% CI {np.percentile(bs, 2.5):+.0f} to {np.percentile(bs, 97.5):+.0f}); ahead in {(d > 0).mean():.0%} of paired drafts")
 print(f"\n{len(pv)} paired drafts ({seeds} seeds x {len(list(slots))} slots), scored by REAL {c_y} stats, starting lineup, ESPN default points\n")
 for w in ("follow_adp", "follow_model", "bot"):
     print(f"{w:13s} mean score {pv[('score', w)].mean():7.0f} | mean finish {pv[('rank', w)].mean():4.1f} of 12 | teams beaten {pv[('beaten', w)].mean():4.0%} | picks who never played {pv[('dnp', w)].mean():.2f}")

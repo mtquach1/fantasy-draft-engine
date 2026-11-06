@@ -129,7 +129,6 @@ def rerank(df: pd.DataFrame, rows: list[dict], mine: pd.DataFrame, gaps: dict, a
     # One table holds my roster, every first-pick candidate and (below) every follow-up candidate, so each hypothetical roster
     # is a cheap row selection instead of a new concatenation.
     n_mine = len(mine)
-    base = starter_value(mine)
     g_now = np.array([blend(r) for r in cand])
     have_next = gaps["next_pick"] is not None
 

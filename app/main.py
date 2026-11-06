@@ -8,11 +8,11 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from pathlib import Path
 
-from fastapi import Body, FastAPI, Header, HTTPException
+from fastapi import Body, FastAPI, Header, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from . import auction, draft, ingestion, live_blend, lookahead, optimizer, persist, recommend as rec, scoring, sports, stats, sync, validate, valuation, views
+from . import auction, draft, ingestion, live_blend, lookahead, observability, optimizer, persist, recommend as rec, scoring, sports, stats, sync, validate, valuation, views
 from .config import LeagueConfig, ScoringType
 from .connectors import PLATFORMS, check_env, get_source
 from .state import _current, next_version, sessions, state
@@ -465,7 +465,7 @@ app = FastAPI(title="Fantasy Draft Engine", lifespan=lifespan)
 class SessionMiddleware:
     """Pure ASGI middleware: in multi-session mode, find (or create) this browser's draft and make it the current one."""
     COOKIE = "draft_session"
-    NO_SESSION = ("/health", "/docs", "/redoc", "/openapi.json", "/session")
+    NO_SESSION = ("/health", "/docs", "/redoc", "/openapi.json", "/session", "/metrics")
 
     def __init__(self, app):
         self.app = app
@@ -521,13 +521,34 @@ class SlowRequestLog:
 
 app.add_middleware(SessionMiddleware)
 app.add_middleware(SlowRequestLog)
+app.add_middleware(observability.RequestObservability)      # outermost: its timing covers everything below it
+
+
+def _metrics_guard(authorization):
+    if not observability.check_token(authorization):
+        raise HTTPException(401, "These endpoints need 'Authorization: Bearer <token>' (METRICS_TOKEN is set on this server).")
+
+
+@app.get("/metrics")
+def metrics_text(authorization: str | None = Header(default=None)):
+    """Prometheus text format: request counts by route and status, duration histograms. Aggregate numbers only, no player or user data."""
+    _metrics_guard(authorization)
+    return Response(observability.METRICS.prometheus(), media_type="text/plain; version=0.0.4; charset=utf-8")
+
+
+@app.get("/metrics/summary")
+def metrics_summary(authorization: str | None = Header(default=None)):
+    """The same numbers as JSON, with p50/p95/p99 per route from the most recent requests."""
+    _metrics_guard(authorization)
+    return observability.METRICS.summary()
 
 
 @app.get("/session")
 def session_info():
     """Is this a shared host with private drafts per browser, or your own single-draft copy?"""
     return {"mode": "multi" if sessions.enabled else "single", "active_sessions": len(sessions) if sessions.enabled else 1,
-            "saved_to_disk": not sessions.enabled, "idle_hours_before_drop": round(sessions.ttl / 3600, 2) if sessions.enabled else None}
+            "saved_to_disk": not sessions.enabled, "idle_hours_before_drop": round(sessions.ttl / 3600, 2) if sessions.enabled else None,
+            "notice": (os.getenv("DEMO_NOTICE") or "").strip()[:300]}          # shown at the top of the page: e.g. "this copy uses sample data"
 
 
 class PickRequest(BaseModel):

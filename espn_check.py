@@ -3,6 +3,7 @@
 
   python espn_check.py check     tests every step the app uses and prints PASS / WARN / FAIL for each
   python espn_check.py watch     prints each pick as it happens (use it while a draft is running)
+  python espn_check.py export    saves the picks made so far (a finished draft works too) as a draft file for the calibration scripts
 
 Reads ESPN_LEAGUE_ID, ESPN_YEAR, ESPN_S2, ESPN_SWID and SPORT from your .env file (README: 'ESPN setup').
 Every run saves what it printed to espn_check_output.txt: paste it if you want help. Cookie values are never printed.
@@ -10,6 +11,7 @@ Every run saves what it printed to espn_check_output.txt: paste it if you want h
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -124,9 +126,32 @@ def check_league(src, sport: str) -> dict:
     return counts
 
 
+def export_draft(src, sport: str, out: Path) -> int:
+    """Write the picks ESPN reports to `out` in the app's draft-file format. Read-only: nothing is sent to ESPN."""
+    from app.draft_export import export_log, unresolved
+    picks = src._fetch_sync()
+    if not picks:
+        result("WARN", "Export", "ESPN reports no picks yet (the draft has not started, or this league/year has no draft). Nothing was written.")
+        return 1
+    info = src.info()
+    doc = export_log(picks, src.team_index, len(src.teams), src.my_team_id(), info.get("draft_type"), sport, "espn")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
+    bad = unresolved(doc)
+    result("PASS" if not bad else "WARN", "Export", f"{len(picks)} picks from {len(src.teams)} teams written to {out}")
+    if bad:
+        say(f"      {bad} pick(s) have no player name (ESPN's name list did not include them). They stay in the file as unreadable picks.")
+    if doc["setup"]["my_slot"] is None:
+        say("      Your team was not found (set ESPN_SWID to mark it). The file still works; your picks just are not left out of the fit.")
+    say("      Team numbers in this file are ESPN's team order, not draft slots.")
+    say(f"      Next:  python research/calibrate_lookahead.py {out}")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="ESPN connection checker")
-    ap.add_argument("command", choices=["check", "watch"])
+    ap.add_argument("command", choices=["check", "watch", "export"])
+    ap.add_argument("--out", help="where export writes the draft file (default: data/espn_draft_export.json)")
     ap.add_argument("--sport", help="nba | mlb | nfl (default: SPORT in .env)")
     ap.add_argument("--poll", type=float, default=3.0, help="seconds between checks in watch mode")
     args = ap.parse_args(argv)
@@ -149,6 +174,9 @@ def main(argv=None) -> int:
         result("PASS", "Connecting to ESPN")
         if args.command == "check":
             return 1 if check_league(src, sport)["FAIL"] else 0
+        if args.command == "export":
+            from app import persist
+            return export_draft(src, sport, Path(args.out) if args.out else persist.DATA_DIR / "espn_draft_export.json")
         common.watch(src, sport, max(args.poll, 2.0))
         return 0
     except KeyboardInterrupt:

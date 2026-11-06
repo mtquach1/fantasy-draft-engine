@@ -99,20 +99,28 @@ h3{margin:0 0 10px;font-size:14px;color:var(--muted);text-transform:uppercase;le
 .price{font-weight:700;color:var(--ok)}
 @media(max-width:560px){.plist.auc .pr{grid-template-columns:34px minmax(0,1fr) 52px auto}.plist.auc .pr .pos{display:none}.plist.auc .pr .vl,.plist.auc .pr.head .vl{display:block}}
 .btn:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px}.hrow h2{margin:0}
+.demo{border-radius:12px;padding:10px 14px;margin-bottom:16px;font-size:14px;background:var(--chip);color:var(--ink);border:1px dashed var(--line)}
+#setupCard .compactnote{display:none;margin:0}
+#setupCard.compact .compactnote{display:block}
+#setupCard.compact .field,#setupCard.compact details,#setupCard.compact #save{display:none!important}
+@media(min-width:781px){#assign{position:sticky;top:8px;z-index:5}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="logo">⚾</div>
+    <div class="logo" id="logo">🏆</div>
     <div><h1>Draft Room</h1><p>Set up your league and the draft clock tracks the rest.</p></div>
     <span class="pill" id="conn">Connecting…</span>
     <a href="/docs">API docs</a>
   </header>
-  <div id="banner" class="banner" hidden></div>
+  <div id="demo" class="demo" role="note" hidden></div>
+  <div id="banner" class="banner" hidden role="status" aria-live="polite"></div>
   <div class="grid">
-    <section class="card">
-      <h2>Draft setup</h2>
+    <section class="card" id="setupCard">
+      <div class="hrow"><h2>Draft setup</h2><button class="btn sm ghost" id="setupToggle" hidden aria-controls="setupCard" aria-expanded="true">Edit setup</button></div>
+      <p class="note compactnote" id="compactNote">Format and teams are locked once picks are recorded; start a new draft to change them.</p>
       <div class="field" id="f-sport">
         <label for="sport">Sport</label>
         <select id="sport"></select>
@@ -178,7 +186,7 @@ h3{margin:0 0 10px;font-size:14px;color:var(--muted);text-transform:uppercase;le
       <h2>Available players</h2>
       <div class="filters">
         <select id="posFilter" aria-label="Position"><option value="">All positions</option></select>
-        <input type="text" id="search" placeholder="Search by name" autocomplete="off" aria-label="Search players by name">
+        <input type="text" id="search" placeholder="Search by name (press /)" autocomplete="off" aria-label="Search players by name">
         <select id="sortBy" aria-label="Sort players by"><option value="value">Sort: value over replacement</option><option value="rank">Sort: overall rank</option></select>
         <label class="chk"><input type="checkbox" id="hideInj"> Hide injury-prone</label>
       </div>
@@ -200,6 +208,7 @@ const $ = id => document.getElementById(id);
 const FIELDS = ["type", "teams", "my_slot", "budget", "rounds"];
 const touched = new Set(), serverErr = {};
 let meta = {options: [], limits: {}, default_rounds: 25}, current = null, timer = null;
+let livePlatform = null, hiddenTicks = 0;   // where picks come from (manual / espn / yahoo / mock), and how long this tab has been in the background
 
 const whole = v => /^\d+$/.test(v.trim()) ? parseInt(v.trim(), 10) : null;
 const blank = v => v.trim() === "";
@@ -348,6 +357,7 @@ const num = (v, f) => v == null ? "–" : f === "points" ? Math.round(v).toLocal
 const sgn = (v, f) => (v >= 0 ? "+" : "−") + num(Math.abs(v), f);
 
 function renderConn(s) {
+  livePlatform = s.platform;
   const c = $("conn"); c.className = "pill"; c.title = s.last_error || s.message || "";
   if (s.platform === "manual") c.textContent = "Manual mode";
   else if (s.connected) { c.classList.add("on"); c.textContent = `● Live · ${s.platform} · synced ${ago(s.last_ok)}`; }
@@ -418,7 +428,28 @@ async function live() {
   if (b.status === "fulfilled") { renderTeam(b.value); renderBench(b.value); }
   return refreshed;
 }
-const tick = async () => { if (document.hidden) return; await load(); live(); };
+const tick = async () => {
+  if (document.hidden) {
+    // A tab in the background only needs news when picks arrive from OUTSIDE (ESPN, Yahoo, the mock draft); in manual mode only this page changes
+    // the draft. Every 3rd tick (15 s) is enough to keep the tab title honest, and the heavy board refresh waits until the tab is visible again.
+    hiddenTicks++;
+    if (livePlatform && livePlatform !== "manual" && hiddenTicks % 3 === 0) await load();
+    return;
+  }
+  hiddenTicks = 0; await load(); live();
+};
+document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });   // coming back: refresh now, not in up to 5 s
+
+const BASE_TITLE = document.title;
+function pageTitle() {                       // what the browser tab says, so you can see the clock from another window
+  const st = current && current.status;
+  if (!current || !current.setup || !st || st.mode === "auction") return BASE_TITLE;
+  if (st.complete) return "Draft complete · " + BASE_TITLE;
+  if (st.you_are_on_the_clock) return `${$("logo").textContent} YOU'RE ON THE CLOCK · ${BASE_TITLE}`;
+  if (st.my_next_pick != null) return `(${st.picks_until_my_turn}) ${BASE_TITLE}`;
+  return BASE_TITLE;
+}
+function applyTitle() { document.title = pageTitle(); }
 
 function fill(setup) {
   $("type").value = setup.draft_type; $("teams").value = setup.teams;
@@ -430,6 +461,34 @@ function checkMode(p) {                           // snake -> auction etc: bids 
   const mode = p.setup ? p.setup.draft_type : "";
   if (mode !== board.mode) { board.mode = mode; refreshBoard(); }
 }
+
+const LOGOS = {mlb: "⚾", nba: "🏀", nfl: "🏈"};
+function setLogo(sport) { $("logo").textContent = LOGOS[sport] || "🏆"; }
+
+let setupOpen = null;                       // null = follow the draft (open until the first pick is recorded); true/false = the user chose
+function setupCompact() {
+  const picks = current && current.status ? current.status.picks_made : 0;
+  return setupOpen === null ? picks > 0 : !setupOpen;
+}
+function applySetupView() {
+  const picks = current && current.status ? current.status.picks_made : 0, compact = setupCompact(), btn = $("setupToggle");
+  $("setupCard").classList.toggle("compact", compact);
+  btn.hidden = !(picks > 0);                // before the first pick the form is simply open: nothing to toggle
+  btn.textContent = compact ? "Edit setup" : "Hide setup";
+  btn.setAttribute("aria-expanded", String(!compact));
+}
+$("setupToggle").onclick = () => { setupOpen = setupCompact(); applySetupView(); };
+
+async function loadNotice() {               // e.g. "this copy uses sample data": set by the server's DEMO_NOTICE
+  try { const s = await api("/session"); if (s && s.notice) { $("demo").textContent = s.notice; $("demo").hidden = false; } } catch (x) { /* a notice is optional */ }
+}
+
+document.addEventListener("keydown", e => {   // "/" jumps to the search box, like most sites with a search
+  if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+  const t = e.target, tag = t && t.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || (t && t.isContentEditable)) return;
+  e.preventDefault(); $("search").focus(); $("search").select();
+});
 
 async function load(first) {
   try {
@@ -447,7 +506,7 @@ async function load(first) {
     current = p; meta.default_rounds = p.default_rounds;
     checkMode(p); lockRoster();
     if (loadBanner) banner("");                                // a refresh clears its own old error, never a message from a button you pressed
-    renderStatus(p); render(); renderAssign();
+    renderStatus(p); render(); renderAssign(); applySetupView(); if (p.sport) setLogo(p.sport); applyTitle();
   } catch (x) { banner(x.msg); loadBanner = true; }
 }
 
@@ -458,7 +517,7 @@ $("save").onclick = async () => {
   ["teams", "my_slot", "budget", "rounds"].forEach(f => body[f] = $(f).value.trim());
   try {
     const p = await api("/draft/setup", {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
-    FIELDS.forEach(f => delete serverErr[f]); touched.clear(); banner("Draft setup saved.", true); current = p; checkMode(p); renderStatus(p); render(); renderAssign();
+    FIELDS.forEach(f => delete serverErr[f]); touched.clear(); banner("Draft setup saved.", true); current = p; checkMode(p); renderStatus(p); render(); renderAssign(); applySetupView(); applyTitle();
     live();
   } catch (x) {
     if (x.errors) { Object.assign(serverErr, x.errors); Object.keys(x.errors).forEach(f => touched.add(f)); banner("Please fix the highlighted fields."); render(); }
@@ -737,7 +796,7 @@ $("undo").onclick = async () => {
   refreshAll();
 };
 
-loadBlend(); load(true); live(); timer = setInterval(tick, 5000);
+loadNotice(); loadBlend(); load(true); live(); timer = setInterval(tick, 5000);
 </script>
 </body>
 </html>

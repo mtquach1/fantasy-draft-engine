@@ -19,3 +19,11 @@ services:
         value: "100"
       - key: SESSION_HOURS
         value: "3"
+      - key: REQUEST_LOG                # one JSON log line per request, with a request id (visible in Render's Logs tab)
+        value: "1"
+      - key: LOG_FORMAT
+        value: json
+      - key: METRICS_TOKEN              # protects /metrics and /metrics/summary; Render generates it, read it in the dashboard
+        generateValue: true
+      - key: DEMO_NOTICE                # the banner at the top of the page
+        value: "Demo with sample data: the players and stats are invented. Your draft is private to this browser and forgotten after a few hours idle. Source: github.com/mtquach1/fantasy-draft-engine"

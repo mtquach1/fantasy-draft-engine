@@ -96,7 +96,6 @@ def adp_report(pre: pd.DataFrame, adp: dict, limit: int = 10, note: str | None =
     from scipy.stats import spearmanr
     rho = float(spearmanr(d["our_rank"], d["adp"]).statistic)
     d["gap"] = d["adp"].rank(method="first") - d["our_rank"].rank(method="first")   # + : we rank him higher than the market
-    cols = ["player_id", "name", "our_rank", "adp"]
     row = lambda x: {"player_id": x["player_id"], "name": x["name"], "our_rank": int(x["our_rank"]), "adp": float(x["adp"])}
     return {"loaded": True, "note": note, "matched": int(len(d)), "rank_correlation": round(rho, 3),
             "verdict": ("very close to the market" if rho >= 0.9 else "reasonably close" if rho >= 0.75 else
