@@ -221,6 +221,8 @@ NFL = Sport(
     yahoo_il=("IR", "IR+"),
 )
 
+DEFAULT_SPORT = "nba"      # what the app starts as when SPORT is not set: the sport this project ships real data for
+
 SPORTS = {s.key: s for s in (MLB, NBA, NFL)}
 RATE_COLUMNS = {"AVG", "OBP", "OPS", "ERA", "WHIP", "FG%", "FT%"}     # already rates: never scaled by games played
 

@@ -49,7 +49,10 @@ def write_br(path, df, bom=False, crlf=False) -> str:
 def api(tmp, monkeypatch, sport="nba", multi=False):
     """A running app on sample data inside `tmp`. Yields (client, app.main module). Re-entering with the same tmp = a restart."""
     for k, v in {"SPORT": sport, "LEAGUE_PRESET": "", "DRAFT_PLATFORM": "manual", "MY_TEAM_ID": "1", "MULTI_SESSION": "1" if multi else ""}.items():
-        monkeypatch.setenv(k, v)
+        if v is None:
+            monkeypatch.delenv(k, raising=False)              # sport=None: start the app with SPORT not set at all
+        else:
+            monkeypatch.setenv(k, v)
     old_i, old_p = ingestion.DATA_DIR, persist.DATA_DIR
     ingestion.DATA_DIR = persist.DATA_DIR = Path(tmp)
     try:

@@ -130,3 +130,59 @@ def test_the_tab_title_shows_the_clock_the_countdown_and_the_end():
     assert "YOU'RE ON THE CLOCK" in fn and "picks_until_my_turn" in fn and "Draft complete" in fn and "BASE_TITLE" in fn
     assert "const BASE_TITLE = document.title" in PAGE
     assert PAGE.count("applyTitle();") >= 2                                   # refreshed after a status load and after saving the setup
+
+
+# ------------------------------------------------------------------------------------------------ the default sport
+def test_the_app_starts_as_basketball_when_no_sport_is_set(monkeypatch, tmp_path):
+    with api(tmp_path, monkeypatch, sport=None) as (c, main):                    # SPORT is genuinely absent from the environment
+        assert "SPORT" not in os.environ
+        assert c.get("/sports").json()["current"] == "nba" == sports.DEFAULT_SPORT
+
+
+def test_a_blank_sport_means_the_default_and_an_explicit_one_still_wins(monkeypatch, tmp_path):
+    with api(tmp_path, monkeypatch, sport="") as (c, main):                      # SPORT= (blank), as an untouched .env line would leave it
+        assert c.get("/sports").json()["current"] == "nba"
+    with api(tmp_path, monkeypatch, sport="nfl") as (c, main):
+        assert c.get("/sports").json()["current"] == "nfl"
+
+
+def test_the_example_settings_and_every_shipped_default_say_basketball():
+    env = (ROOT / ".env.example").read_text(encoding="utf-8")
+    assert re.search(r"^SPORT=nba\b", env, re.M) and not re.search(r"^SPORT=(mlb|nfl)\b", env, re.M)
+    assert 'SPORT="${SPORT:-nba}"' in (ROOT / "docker-entrypoint.sh").read_text(encoding="utf-8")
+    assert "SPORT: nba" in (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    assert sports.DEFAULT_SPORT == "nba" and "nba" in sports.SPORTS
+
+
+def test_starting_with_no_data_says_which_command_to_run(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    from app import ingestion, persist, main
+    for k in ("SPORT", "LEAGUE_PRESET", "MULTI_SESSION", "DRAFT_PLATFORM"):
+        monkeypatch.delenv(k, raising=False)
+    old_i, old_p = ingestion.DATA_DIR, persist.DATA_DIR
+    ingestion.DATA_DIR = persist.DATA_DIR = tmp_path                              # an empty folder: no players.csv anywhere
+    try:
+        with pytest.raises(RuntimeError) as e:
+            with TestClient(main.app):
+                pass
+    finally:
+        ingestion.DATA_DIR, persist.DATA_DIR = old_i, old_p
+    msg = str(e.value)
+    assert "players.csv" in msg and "python make_sample_sport.py nba" in msg and "data/README.md" in msg and "make_sample_data.py" not in msg
+
+
+def test_the_baseball_hint_points_at_the_baseball_generator(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    from app import ingestion, persist, main
+    for k in ("LEAGUE_PRESET", "MULTI_SESSION", "DRAFT_PLATFORM"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("SPORT", "mlb")
+    old_i, old_p = ingestion.DATA_DIR, persist.DATA_DIR
+    ingestion.DATA_DIR = persist.DATA_DIR = tmp_path
+    try:
+        with pytest.raises(RuntimeError) as e:
+            with TestClient(main.app):
+                pass
+    finally:
+        ingestion.DATA_DIR, persist.DATA_DIR = old_i, old_p
+    assert "python make_sample_data.py" in str(e.value)

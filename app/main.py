@@ -408,6 +408,11 @@ def load_sport(key: str, preset: str | None = None) -> dict:
     return report
 
 
+def _sport_from_env() -> str:
+    """SPORT from the environment; blank or missing means the default sport (basketball)."""
+    return os.getenv("SPORT", "").strip().lower() or sports.DEFAULT_SPORT
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _multi = os.getenv("MULTI_SESSION", "").strip().lower() in ("1", "true", "yes", "on")
@@ -426,10 +431,16 @@ async def lifespan(app: FastAPI):
     state.sync.update(platform=platform, setup_problems=problems, setup_warnings=warnings)
     _preset = os.getenv("LEAGUE_PRESET", "").strip().lower() or None     # e.g. espn_default (NBA); blank = the sport's standard league
     try:
-        load_sport(os.getenv("SPORT", "mlb").strip().lower(), _preset)    # SPORT=mlb | nba | nfl in .env
-    except ValueError as _e:                                              # unknown preset: say so, then start with the standard league
-        print(f"[config] {_e} Starting with the standard league instead.")
-        load_sport(os.getenv("SPORT", "mlb").strip().lower())
+        try:
+            load_sport(_sport_from_env(), _preset)                  # SPORT=nba | mlb | nfl in .env (nba when unset)
+        except ValueError as _e:                                          # unknown preset: say so, then start with the standard league
+            print(f"[config] {_e} Starting with the standard league instead.")
+            load_sport(_sport_from_env())
+    except FileNotFoundError as _e:                                       # no data yet: say what to do instead of dumping a bare error
+        _sp = _sport_from_env()
+        raise RuntimeError(f"{_e}\n\nNo data yet? To try the app on FAKE sample data run:   python make_sample_sport.py {_sp}"
+                           f"{'  (baseball: python make_sample_data.py)' if _sp == 'mlb' else ''}\n"
+                           f"For your own data see data/README.md. To use a different sport set SPORT in .env.") from None
     if not _multi:
         _restore(platform)                                   # bring back the saved setup and picks, if any
     for line in problems + warnings:

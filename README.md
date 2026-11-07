@@ -10,7 +10,7 @@ A draft assistant for fantasy basketball (baseball and football profiles are inc
 model, values them for **your** league's scoring and roster, and during a draft recommends the pick that adds the most to *your*
 lineup. It never drafts for you: you make the pick on ESPN/Yahoo yourself.
 
-509 automated tests run in CI on Python 3.12 and 3.13. The whole front end is one static page.
+514 automated tests run in CI on Python 3.12 and 3.13. The whole front end is one static page.
 
 ## What it does
 - **Own projection model** (`app/own_model.py`): per-minute production, minutes and games from past seasons, with shrinkage toward
@@ -36,10 +36,14 @@ lineup. It never drafts for you: you make the pick on ESPN/Yahoo yourself.
 ## Quick start (Windows, from the project folder)
 ```
 pip install -r requirements.txt
-pytest                                   # 509 tests
+pytest                                   # 514 tests
 python make_sample_sport.py nba          # FAKE sample data, to try the app right away
 uvicorn app.main:app --reload            # open http://127.0.0.1:8000/
 ```
+Basketball (NBA) is the default sport: with no `.env` and no `SPORT` setting the app starts as NBA. Baseball and football profiles exist, but they need
+their own data files (`python make_sample_data.py` makes fake baseball data; football uses `python make_sample_sport.py nfl`) and are chosen with `SPORT=mlb` or `SPORT=nfl`.
+If the data is missing, the server stops with the command to run.
+
 With Docker: `docker compose up` (generates fake sample data when `data/` is empty). The image builds and runs on Render (see the live demo); `docker compose` itself has not been run locally by the author.
 
 ## Using real data
@@ -51,7 +55,7 @@ With Docker: `docker compose up` (generates fake sample data when `data/` is emp
 4. Optional: `python build_own_model.py --blend 0.5` pulls the model halfway toward a reference projection file
    (`data/nba/players_third_party.csv`, same layout as `players.csv`). It also writes `players_own.csv` (the pure own model) and
    `blend.json`, which switch on the blend slider in the page's setup card; the slider starts at the weight you built with.
-5. In `.env` set `SPORT=nba` and `LEAGUE_PRESET=espn_default` for ESPN's default points league (10 starters, 3 bench, 3 IR).
+5. Copy `.env.example` to `.env` (it already says `SPORT=nba` and `LEAGUE_PRESET=espn_default`, ESPN's default points league: 10 starters, 3 bench, 3 IR).
 6. Restart the server and open `/health/data`: it must say `"ok": true`.
 
 During a draft, the slider changes the blend, and `PUT /players/override` (see `/docs`) changes one player's games or minutes; `DELETE /players/overrides` undoes all.
@@ -156,7 +160,7 @@ app/scoring.py       team score and pace    app/draft.py       snake/linear/auct
 app/main.py          API                    app/static/index.html   the Draft Room page
 pipeline/            data pipeline: sources, quality gate, snapshots, events, replay (docs/PIPELINE.md)
 build_own_model.py   data builder           research/          backtests (reproduce the numbers above)
-tests/               509 tests              Dockerfile, docker-compose.yml, render.yaml, .github/workflows/tests.yml
+tests/               514 tests              Dockerfile, docker-compose.yml, render.yaml, .github/workflows/tests.yml
 ```
 
 ## License
